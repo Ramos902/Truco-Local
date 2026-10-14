@@ -201,6 +201,16 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
         }
 
+        /* Modo 3D Ragdoll Overlay */
+        .mode-3d-overlay .table-inner-ring {
+            opacity: 0 !important;
+        }
+        .mode-3d-overlay #played-cards,
+        .mode-3d-overlay #deck-area {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
         /* Toggle buttons — Lobby */
         .mode-btn, .variant-btn {
             background: rgba(255,255,255,0.04);
@@ -586,8 +596,12 @@
                 </div>
             </div>
 
-            <!-- CONTROLES SUPERIORES (Histórico, Menu, Som & Emojis) -->
+            <!-- CONTROLES SUPERIORES (Visão 3D, Histórico, Menu, Som & Emojis) -->
             <div class="absolute top-4 right-4 z-[60] flex items-center gap-2 md:gap-3">
+                <button id="btn-toggle-view-mode" class="glass-modal border border-zinc-600/70 px-3 py-2 rounded-full hover:bg-white/10 transition-all text-emerald-400 shadow-lg flex items-center gap-1.5 font-bold text-xs" title="Alternar visão 2D / 3D Ragdoll">
+                    <i class="ph ph-cube text-base" id="icon-view-mode"></i>
+                    <span id="text-view-mode">3D Ragdoll</span>
+                </button>
                 <button id="btn-hand-log" class="glass-modal border border-zinc-600/70 px-3 py-2 rounded-full hover:bg-white/10 transition-all text-amber-300 shadow-lg flex items-center gap-1.5 font-bold text-xs" title="Histórico da Rodada (Vazas)">
                     <i class="ph ph-scroll text-base text-amber-400"></i>
                     <span class="hidden sm:inline">Histórico</span>
@@ -615,6 +629,9 @@
                     💬
                 </button>
             </div>
+
+            <!-- CONTAINER 3D RAGDOLL BOTECO -->
+            <div id="canvas-3d-container" class="absolute inset-0 z-0 hidden w-full h-full pointer-events-auto overflow-hidden"></div>
 
             <div id="waiting-area" class="absolute inset-0 flex flex-col items-center justify-center z-40 bg-black/40 backdrop-blur-sm">
                 <div class="animate-spin text-4xl text-green-400 mb-3"><i class="ph ph-spinner-gap"></i></div>
@@ -893,6 +910,17 @@
                             <button class="w-10 h-10 rounded-full bg-[#7f1d1d] border-2 border-transparent hover:border-white ring-2 ring-transparent focus:ring-red-400 color-selector shadow-lg" data-color="table-red" title="Vermelho"></button>
                         </div>
                     </div>
+
+                    <!-- Modo de Visão 3D -->
+                    <div>
+                        <span class="text-zinc-200 block mb-2 font-medium text-sm">Modo de Visualização</span>
+                        <div class="flex items-center justify-between bg-black/40 p-3 rounded-xl border border-zinc-800">
+                            <span class="text-xs text-zinc-300 flex items-center gap-2">
+                                <i class="ph ph-cube text-lg text-emerald-400"></i> Visão 3D Ragdoll
+                            </span>
+                            <button id="settings-toggle-3d-btn" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-500 transition-colors">Ativado</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -916,6 +944,11 @@
                 <div class="flex items-center justify-between p-3 bg-zinc-900/90 rounded-xl border border-zinc-800 text-xs">
                     <span class="font-bold text-zinc-200 flex items-center gap-2">💥 Tapa na Mesa (Pancada)</span>
                     <button id="toggle-slam-btn" class="font-bold px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-500 transition-colors">Ativado</button>
+                </div>
+
+                <div class="flex items-center justify-between p-3 bg-zinc-900/90 rounded-xl border border-zinc-800 text-xs">
+                    <span class="font-bold text-zinc-200 flex items-center gap-2">🎲 Visão 3D Ragdoll</span>
+                    <button id="menu-toggle-3d-btn" class="font-bold px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-500 transition-colors">Ativado</button>
                 </div>
 
                 <button id="btn-menu-rules" class="w-full bg-zinc-800/80 hover:bg-zinc-700 font-semibold py-2.5 rounded-xl border border-zinc-700 text-zinc-200 transition-all text-xs flex items-center justify-center gap-2">
@@ -1106,6 +1139,8 @@
         </div>
     </div>
     
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="truco3d.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js"></script>
 </body>

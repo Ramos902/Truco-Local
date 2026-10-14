@@ -303,9 +303,13 @@ function escapeHTML(str) {
 }
 
 // ─── Efeito Visual & Sonoro "Tapa na Mesa" (Pancada) ─────────────────────────
-function triggerTableSlam() {
+function triggerTableSlam(playerId) {
     if (!isSlamEnabled) return;
     sfx.playSlam();
+
+    if (window.Truco3D) {
+        Truco3D.onTableSlam(playerId || socket.id);
+    }
 
     const tableContainer = document.getElementById('game-main-container');
     if (tableContainer) {
@@ -1007,6 +1011,10 @@ socket.on('updateState', (state) => {
         updateRecentRoomScore(currentRoomCode, state.score);
     }
 
+    if (window.Truco3D) {
+        Truco3D.updatePlayers(globalPlayers, socket.id);
+    }
+
     // ── Indicadores de Vaza ──────────────────────────────────────────────────
     ['sidebar-round-indicators', 'mobile-round-indicators'].forEach(containerId => {
         const container = document.getElementById(containerId);
@@ -1232,9 +1240,13 @@ socket.on('cardPlayed', (data) => {
     }
 
     if (data.isSlam || data.isManilha) {
-        triggerTableSlam();
+        triggerTableSlam(data.playerId);
     } else if (data.playerId !== socket.id) {
         sfx.playCard();
+    }
+
+    if (window.Truco3D) {
+        Truco3D.onCardPlayed(data);
     }
 
     renderPlayedCard(data.playerId, data.card, true);
@@ -1257,6 +1269,10 @@ socket.on('trickEnded', (data) => {
                 currentHandLog.tricks[endedTrickIdx].decisivePlayer = topP ? topP.name : null;
             }
         }
+    }
+
+    if (window.Truco3D) {
+        Truco3D.onTrickEnded();
     }
 
     // Desativa turno imediatamente durante a transição
@@ -1286,6 +1302,10 @@ socket.on('handEnded', (data) => {
     document.getElementById('action-buttons').style.display = 'none';
     document.querySelectorAll('.player-tag').forEach(el => el.classList.remove('player-turn-active'));
     document.getElementById('played-cards').innerHTML = '';
+
+    if (window.Truco3D) {
+        Truco3D.clearTable();
+    }
 
     // Registra desfecho da mão no Histórico da Rodada
     currentHandLog.handWinner = data.winnerTeam;
@@ -1448,6 +1468,10 @@ socket.on('trucoRequested', (data) => {
     iVotedToRun = false;
     isPlayingCard = false;
     triggerTrucoSplash(data.newValue);
+
+    if (window.Truco3D) {
+        Truco3D.onTrucoRequested(data.newValue, data.answeringTeam, data.requestedBy);
+    }
 
     // Registra pedido de Truco no Histórico da Rodada (Truco Raiz)
     currentHandLog.trucoEvents.push({
@@ -1919,6 +1943,9 @@ function setupSecretSignals() {
 
             sfx.playClick();
             socket.emit('sendSecretSignal', { roomCode: currentRoomCode, signalId });
+            if (window.Truco3D) {
+                Truco3D.onSecretSignal(socket.id, signalId);
+            }
             showNotification(`🤫 Você fez o sinal: ${sig.name} (${sig.meaning})`, 'border-amber-400 text-amber-300');
         });
     });
@@ -1937,6 +1964,10 @@ socket.on('secretSignalReceived', (data) => {
     if (!sig) return;
 
     sfx.playSignal();
+
+    if (window.Truco3D) {
+        Truco3D.onSecretSignal(data.senderId, data.signalId);
+    }
 
     const toast = document.getElementById('secret-signal-toast');
     const toastIcon = document.getElementById('secret-signal-icon');
@@ -2077,4 +2108,56 @@ window.addEventListener('keydown', (e) => {
 
 socket.on('playerLeft', (data) => {
     showNotification(`${data.playerName} saiu da partida.`, 'border-red-500 text-red-400');
+});
+
+// ─── Inicialização e Controles do Visualizador 3D Ragdoll de Boteco ───────────
+const canvas3dEl = document.getElementById('canvas-3d-container');
+if (window.Truco3D && canvas3dEl) {
+    Truco3D.init(canvas3dEl);
+}
+
+function update3DButtonsUI() {
+    const is3D = window.Truco3D ? (Truco3D.getMode() === '3d') : false;
+    ['settings-toggle-3d-btn', 'menu-toggle-3d-btn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.textContent = is3D ? 'Ativado' : 'Desativado';
+        btn.className = is3D
+            ? 'text-xs font-bold px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-500 transition-colors'
+            : 'text-xs font-bold px-3 py-1.5 rounded-lg bg-zinc-700 text-zinc-300 hover:bg-zinc-600 transition-colors';
+    });
+}
+update3DButtonsUI();
+
+const btnToggleViewMode = document.getElementById('btn-toggle-view-mode');
+if (btnToggleViewMode) {
+    btnToggleViewMode.addEventListener('click', () => {
+        sfx.playClick();
+        if (window.Truco3D) {
+            Truco3D.toggleMode();
+            update3DButtonsUI();
+            const mode = Truco3D.getMode();
+            showNotification(
+                mode === '3d' ? "🎲 Modo 3D Ragdoll Ativado!" : "🃏 Modo 2D Clássico Ativado!",
+                "border-emerald-500 text-emerald-400"
+            );
+        }
+    });
+}
+
+['settings-toggle-3d-btn', 'menu-toggle-3d-btn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        sfx.playClick();
+        if (window.Truco3D) {
+            Truco3D.toggleMode();
+            update3DButtonsUI();
+            const mode = Truco3D.getMode();
+            showNotification(
+                mode === '3d' ? "🎲 Modo 3D Ragdoll Ativado!" : "🃏 Modo 2D Clássico Ativado!",
+                "border-emerald-500 text-emerald-400"
+            );
+        }
+    });
 });
