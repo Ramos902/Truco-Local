@@ -631,7 +631,18 @@
             </div>
 
             <!-- CONTAINER 3D RAGDOLL BOTECO -->
-            <div id="canvas-3d-container" class="absolute inset-0 z-0 hidden w-full h-full pointer-events-auto overflow-hidden"></div>
+            <div id="canvas-3d-container" class="absolute inset-0 z-0 hidden w-full h-full pointer-events-auto overflow-hidden">
+                <!-- Controles Flutuantes da Câmera 3D de Órbita Livre -->
+                <div id="controls-3d-overlay" class="absolute top-3 left-3 z-20 flex flex-col items-start gap-1.5 pointer-events-none select-none">
+                    <button id="btn-reset-cam" class="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 text-amber-400 border border-amber-500/30 text-xs font-bold shadow-lg backdrop-blur-md transition-all active:scale-95 btn-tactile cursor-pointer" title="Redefinir Câmera para a visão padrão da mesa (ou clique duplo)">
+                        <i class="ph ph-camera-rotate text-base"></i>
+                        <span>Resetar Câmera</span>
+                    </button>
+                    <div class="px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-zinc-400 backdrop-blur-sm hidden sm:block border border-white/5 shadow">
+                        <i class="ph ph-mouse-simple text-amber-400 mr-1"></i> Arraste para girar 360° | Scroll para Zoom
+                    </div>
+                </div>
+            </div>
 
             <div id="waiting-area" class="absolute inset-0 flex flex-col items-center justify-center z-40 bg-black/40 backdrop-blur-sm">
                 <div class="animate-spin text-4xl text-green-400 mb-3"><i class="ph ph-spinner-gap"></i></div>

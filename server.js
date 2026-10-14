@@ -484,7 +484,7 @@ io.on('connection', (socket) => {
                 state.trucoAnsweringTeam = null;
                 const winnerTeam = myTeam === 0 ? 1 : 0;
                 state.score[winnerTeam] += values[state.trucoLevel - 1];
-                io.to(roomCode).emit('trucoCanceled');
+                io.to(roomCode).emit('trucoCanceled', { runningTeam: myTeam, winnerTeam });
                 io.to(roomCode).emit('trickEnded', { trickResults: state.trickResults, winnerTeam });
                 state.tableCards = [];
                 if (state.matchStats) {

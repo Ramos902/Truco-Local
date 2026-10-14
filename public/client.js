@@ -1325,6 +1325,10 @@ socket.on('gameOver', (data) => {
     clearTrickCleanTimer();
     document.getElementById('played-cards').innerHTML = '';
 
+    if (window.Truco3D) {
+        Truco3D.onGameOver(data.winnerTeam);
+    }
+
     const modal = document.getElementById('game-over-modal');
     const isWinner = (data.winnerTeam === myTeam);
     sfx.playWin();
@@ -1590,11 +1594,16 @@ socket.on('trucoAccepted', (data) => {
     showNotification(`Truco Aceito! Vale ${data.newValue} pontos.`, 'border-red-500 text-red-400');
 });
 
-socket.on('trucoCanceled', () => {
+socket.on('trucoCanceled', (data) => {
+    const runningTeam = (data && data.runningTeam !== undefined) ? data.runningTeam : currentTrucoAnsweringTeam;
     iVotedToRun = false;
     currentTrucoAnsweringTeam = -1;
     isPlayingCard = false;
     document.getElementById('truco-modal').classList.add('hidden');
+
+    if (window.Truco3D) {
+        Truco3D.onPlayerRun(runningTeam);
+    }
 
     // Registra recusa de Truco no Histórico da Rodada (Truco Raiz)
     currentHandLog.trucoEvents.push({
@@ -2161,3 +2170,15 @@ if (btnToggleViewMode) {
         }
     });
 });
+
+const btnResetCam = document.getElementById('btn-reset-cam');
+if (btnResetCam) {
+    btnResetCam.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sfx.playClick();
+        if (window.Truco3D) {
+            Truco3D.resetCamera();
+            showNotification('🎥 Câmera 3D redefinida!', 'border-amber-400 text-amber-300');
+        }
+    });
+}
