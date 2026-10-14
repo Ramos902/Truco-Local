@@ -871,8 +871,15 @@ socket.on('gameReady', data => {
 // ─── Renderiza Carta Jogada na Mesa ──────────────────────────────────────────
 function renderPlayedCard(playerId, card, animate = true) {
     const tableCards = document.getElementById('played-cards');
+    const cardKey = `${playerId}_${card.value}_${card.suit}`;
+
+    // Evita duplicar se a carta já estiver renderizada
+    const existing = tableCards.querySelector(`[data-card-key="${cardKey}"]`);
+    if (existing) return;
+
     const cardEl = document.createElement('div');
     cardEl.className = "absolute table-card-shadow z-20 pointer-events-none";
+    cardEl.dataset.cardKey = cardKey;
 
     const myIndex = globalPlayers.findIndex(p => p.id === socket.id);
     const pIndex  = globalPlayers.findIndex(p => p.id === playerId);
@@ -885,8 +892,9 @@ function renderPlayedCard(playerId, card, animate = true) {
         relativePos = (pIndex - myIndex + 4) % 4;
     }
 
-    // Leve rotação física realista para cartas jogadas na mesa
-    const randomTilt = Math.floor(Math.random() * 12) - 6;
+    // Rotação determinística e estável (não treme nem muda a cada updateState)
+    const cardSeed = ((playerId.charCodeAt(0) || 7) * 13 + (card.value.charCodeAt(0) || 3) * 7 + (card.suit.charCodeAt(0) || 1)) % 11;
+    const randomTilt = cardSeed - 5; // varia de -5deg a +5deg de forma fixa
 
     let originX = '0px', originY = '0px';
     if (relativePos === 0) { 
@@ -1032,14 +1040,24 @@ socket.on('updateState', (state) => {
         }
     });
 
-    // ── Reconciliação das Cartas na Mesa ─────────────────────────────────────
+    // ── Reconciliação Inteligente das Cartas na Mesa (Sem Glitches) ──────────
     const tableCardsContainer = document.getElementById('played-cards');
     if (!state.tableCards || state.tableCards.length === 0) {
         tableCardsContainer.innerHTML = '';
     } else {
-        tableCardsContainer.innerHTML = '';
+        const currentKeys = state.tableCards.map(tc => `${tc.playerId}_${tc.card.value}_${tc.card.suit}`);
+        // Remove cartas que não estão mais na mesa
+        Array.from(tableCardsContainer.children).forEach(el => {
+            if (el.dataset.cardKey && !currentKeys.includes(el.dataset.cardKey)) {
+                el.remove();
+            }
+        });
+        // Adiciona cartas que ainda não foram renderizadas sem tocar nas já existentes
         state.tableCards.forEach(tc => {
-            renderPlayedCard(tc.playerId, tc.card, false);
+            const cardKey = `${tc.playerId}_${tc.card.value}_${tc.card.suit}`;
+            if (!tableCardsContainer.querySelector(`[data-card-key="${cardKey}"]`)) {
+                renderPlayedCard(tc.playerId, tc.card, false);
+            }
         });
     }
 

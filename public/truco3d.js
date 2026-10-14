@@ -346,7 +346,10 @@
         const feltMat = new THREE.MeshStandardMaterial({
             color: 0x09482b,
             roughness: 0.94,
-            metalness: 0.04
+            metalness: 0.04,
+            polygonOffset: true,
+            polygonOffsetFactor: 1,
+            polygonOffsetUnits: 1
         });
         const felt = new THREE.Mesh(feltGeo, feltMat);
         felt.position.y = 0.005;
@@ -358,7 +361,7 @@
         const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, side: THREE.DoubleSide });
         const innerRing = new THREE.Mesh(ringGeo, ringMat);
         innerRing.rotation.x = -Math.PI / 2;
-        innerRing.position.y = 0.125;
+        innerRing.position.y = 0.121;
         tableGroup.add(innerRing);
 
         // Pé central da mesa de ferro fundido
@@ -1015,17 +1018,28 @@
             }, 260);
         }
 
-        // Cria a carta 3D
-        const cardGeo = new THREE.BoxGeometry(0.72, 0.015, 1.08);
+        // Cria a carta 3D (espessura fina e elevação segura acima do feltro para eliminar Z-fighting)
+        const cardGeo = new THREE.BoxGeometry(0.72, 0.010, 1.08);
         const frontMat = new THREE.MeshStandardMaterial({
             map: getCardTexture(data.card, data.card.hidden, data.isManilha),
-            roughness: 0.4
+            roughness: 0.4,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
         });
         const backMat  = new THREE.MeshStandardMaterial({
             map: getCardTexture(data.card, true),
-            roughness: 0.5
+            roughness: 0.5,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
         });
-        const edgeMat  = new THREE.MeshStandardMaterial({ color: 0xe2e8f0 });
+        const edgeMat  = new THREE.MeshStandardMaterial({
+            color: 0xe2e8f0,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
+        });
 
         const materials = [edgeMat, edgeMat, frontMat, backMat, edgeMat, edgeMat];
         const cardMesh = new THREE.Mesh(cardGeo, materials);
@@ -1041,7 +1055,7 @@
         const radius = 0.45 + Math.random() * 0.45;
         const targetX = Math.cos(angle) * radius;
         const targetZ = Math.sin(angle) * radius;
-        const targetY = 0.125 + (activeCards.length * 0.018);
+        const targetY = 0.134 + (activeCards.length * 0.012);
         const targetRotY = (Math.random() - 0.5) * 1.5;
 
         scene.add(cardMesh);
