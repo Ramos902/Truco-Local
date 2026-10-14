@@ -208,6 +208,24 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ── Sinais Secretos de Dupla (Truco Raiz) ──────────────────────────────────
+    socket.on('sendSecretSignal', ({ roomCode, signalId }) => {
+        const room = rooms[roomCode];
+        if (!room || !room.players || room.players.length !== 4) return;
+        const playerIndex = room.players.findIndex(p => p.id === socket.id);
+        if (playerIndex === -1) return;
+        const partnerIndex = (playerIndex + 2) % 4;
+        const partner = room.players[partnerIndex];
+        const sender = room.players[playerIndex];
+        if (partner && partner.id) {
+            io.to(partner.id).emit('secretSignalReceived', {
+                senderId: socket.id,
+                senderName: sender.name,
+                signalId
+            });
+        }
+    });
+
     // ── Status das Salas Recentes e Pontuação ──────────────────────────────────
     socket.on('getRecentRoomsStatus', ({ token, localRoomCodes = [] }) => {
         const list = [];

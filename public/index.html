@@ -176,10 +176,30 @@
             border-radius: 3px;
         }
         
-        /* Cores de Mesa */
-        .table-green { background-color: #064e3b; }
-        .table-blue  { background-color: #1e3a8a; }
-        .table-red   { background-color: #7f1d1d; }
+        /* Cores Nobres de Mesa de Feltro (Truco Raiz) */
+        .table-green { background: radial-gradient(circle at 50% 50%, #0d5435 0%, #083c25 60%, #031c11 100%) !important; }
+        .table-blue  { background: radial-gradient(circle at 50% 50%, #173b6c 0%, #0f274a 60%, #081426 100%) !important; }
+        .table-red   { background: radial-gradient(circle at 50% 50%, #631818 0%, #450f0f 60%, #220505 100%) !important; }
+
+        /* Botões Táteis com Presença Física (Anti-AI) */
+        .btn-tactile {
+            position: relative;
+            border-bottom-width: 4px;
+            transition: transform 0.08s ease, border-bottom-width 0.08s ease, filter 0.15s ease;
+            user-select: none;
+        }
+        .btn-tactile:hover {
+            filter: brightness(1.08);
+        }
+        .btn-tactile:active {
+            transform: translateY(2px);
+            border-bottom-width: 2px;
+        }
+
+        /* Cartas com Sombra de Contato Físico */
+        .card-contact-shadow {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
 
         /* Toggle buttons — Lobby */
         .mode-btn, .variant-btn {
@@ -566,8 +586,12 @@
                 </div>
             </div>
 
-            <!-- CONTROLES SUPERIORES (Menu, Som & Emojis) -->
+            <!-- CONTROLES SUPERIORES (Histórico, Menu, Som & Emojis) -->
             <div class="absolute top-4 right-4 z-[60] flex items-center gap-2 md:gap-3">
+                <button id="btn-hand-log" class="glass-modal border border-zinc-600/70 px-3 py-2 rounded-full hover:bg-white/10 transition-all text-amber-300 shadow-lg flex items-center gap-1.5 font-bold text-xs" title="Histórico da Rodada (Vazas)">
+                    <i class="ph ph-scroll text-base text-amber-400"></i>
+                    <span class="hidden sm:inline">Histórico</span>
+                </button>
                 <button id="btn-game-menu" class="glass-modal border border-zinc-600/70 px-3.5 py-2 rounded-full hover:bg-white/10 transition-all text-zinc-200 shadow-lg flex items-center gap-2 font-bold text-xs" title="Menu da Partida (Esc)">
                     <i class="ph ph-list text-base text-emerald-400"></i>
                     <span>Menu</span>
@@ -664,15 +688,70 @@
                         <span id="my-name" class="text-white font-bold px-5 py-1.5 rounded-full text-xs md:text-sm player-tag relative shadow-lg"></span>
                         
                         <div id="action-buttons" class="hidden gap-2" style="display:none;">
-                            <button id="btn-truco" class="bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 font-black px-4 py-1.5 md:px-5 md:py-2 rounded-xl shadow-[0_0_15px_rgba(239,68,68,0.5)] border border-red-500 uppercase pointer-events-auto text-xs md:text-sm backdrop-blur-sm transition-transform active:scale-95">
-                                Truco!
+                            <button id="btn-truco" class="btn-tactile bg-red-700 hover:bg-red-600 text-white font-black px-4 py-1.5 md:px-5 md:py-2 rounded-xl shadow-lg border border-red-500 border-b-4 border-b-red-950 uppercase pointer-events-auto text-xs md:text-sm tracking-wide">
+                                🔥 Truco!
                             </button>
-                            <button id="btn-slam" class="bg-amber-900/80 hover:bg-amber-800 font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-xl shadow-lg border border-amber-600 text-xs md:text-sm pointer-events-auto flex items-center gap-1.5 backdrop-blur-sm transition-all" title="Bater com força na mesa!">
+                            <button id="btn-slam" class="btn-tactile bg-amber-800 hover:bg-amber-700 text-amber-100 font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-xl shadow-lg border border-amber-600 border-b-4 border-b-amber-950 text-xs md:text-sm pointer-events-auto flex items-center gap-1.5" title="Bater com força na mesa!">
                                 💥 Pancada
                             </button>
-                            <button id="btn-hide-card" class="bg-zinc-800/90 hover:bg-zinc-700 font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-xl shadow-lg border border-zinc-600 text-xs md:text-sm pointer-events-auto flex items-center gap-1.5 backdrop-blur-sm transition-all">
+                            <button id="btn-hide-card" class="btn-tactile bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-xl shadow-lg border border-zinc-600 border-b-4 border-b-zinc-950 text-xs md:text-sm pointer-events-auto flex items-center gap-1.5">
                                 <i class="ph ph-eye-closed text-base"></i> Ocultar
                             </button>
+                        </div>
+
+                        <!-- Sinais Secretos (Dupla 2v2 — Acessível durante toda a partida) -->
+                        <div class="relative inline-block" id="signals-container">
+                            <button id="btn-signals" type="button" class="btn-tactile bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-xl shadow-lg border border-slate-600 border-b-4 border-b-slate-950 text-xs md:text-sm pointer-events-auto flex items-center gap-1.5" title="Sinais Secretos do Truco Raiz (Apenas seu parceiro verá)">
+                                🤫 Sinal
+                            </button>
+                            <div id="signals-menu" class="hidden absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-64 bg-zinc-950/95 p-2 rounded-2xl border border-amber-500/50 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-1 pointer-events-auto">
+                                <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-400 border-b border-zinc-800 flex items-center justify-between">
+                                    <span>Sinais Secretos (2v2)</span>
+                                    <span class="text-zinc-500 font-normal">Apenas parceiro</span>
+                                </div>
+                                <button type="button" class="signal-btn text-left px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-xs font-semibold text-zinc-200 flex items-center gap-2 transition-colors" data-signal="piscar" data-label="Piscou o olho (Zap)">
+                                    <span class="text-base">😉</span>
+                                    <div class="flex-1">
+                                        <span class="font-bold text-white">Piscar olho</span>
+                                        <span class="text-[10px] text-amber-400 block font-normal">Tenho o Zap / Manilha Maior</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="signal-btn text-left px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-xs font-semibold text-zinc-200 flex items-center gap-2 transition-colors" data-signal="biquinho" data-label="Fez biquinho (7 Copas)">
+                                    <span class="text-base">😗</span>
+                                    <div class="flex-1">
+                                        <span class="font-bold text-white">Biquinho</span>
+                                        <span class="text-[10px] text-red-400 block font-normal">Tenho o 7 de Copas / Segunda</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="signal-btn text-left px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-xs font-semibold text-zinc-200 flex items-center gap-2 transition-colors" data-signal="sobrancelha" data-label="Ergueu a sobrancelha (Espadilha)">
+                                    <span class="text-base">🤨</span>
+                                    <div class="flex-1">
+                                        <span class="font-bold text-white">Sobrancelha</span>
+                                        <span class="text-[10px] text-sky-400 block font-normal">Tenho Espadilha / Terceira</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="signal-btn text-left px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-xs font-semibold text-zinc-200 flex items-center gap-2 transition-colors" data-signal="nariz" data-label="Coçou o nariz (7 Ouros)">
+                                    <span class="text-base">👃</span>
+                                    <div class="flex-1">
+                                        <span class="font-bold text-white">Coçar nariz</span>
+                                        <span class="text-[10px] text-yellow-500 block font-normal">Tenho 7 Ouros / Pica-fumo</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="signal-btn text-left px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-xs font-semibold text-zinc-200 flex items-center gap-2 transition-colors" data-signal="bocejo" data-label="Bocejou (Tô Liso / Mão Podre)">
+                                    <span class="text-base">🥱</span>
+                                    <div class="flex-1">
+                                        <span class="font-bold text-white">Bocejo</span>
+                                        <span class="text-[10px] text-zinc-400 block font-normal">Tô liso / Sem carta boa</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="signal-btn text-left px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-xs font-semibold text-zinc-200 flex items-center gap-2 transition-colors" data-signal="peito" data-label="Bateu no peito (Pede Truco!)">
+                                    <span class="text-base">✊</span>
+                                    <div class="flex-1">
+                                        <span class="font-bold text-white">Bater no peito</span>
+                                        <span class="text-[10px] text-emerald-400 block font-normal">Chama o Truco, garanto!</span>
+                                    </div>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -830,6 +909,10 @@
                     <i class="ph ph-play-fill text-base"></i> Retomar Jogo
                 </button>
 
+                <button id="btn-menu-hand-log" class="w-full bg-zinc-800/80 hover:bg-zinc-700 font-semibold py-2.5 rounded-xl border border-zinc-700 text-amber-300 transition-all text-xs flex items-center justify-center gap-2">
+                    <i class="ph ph-scroll text-base text-amber-400"></i> Histórico da Rodada (Vazas)
+                </button>
+
                 <div class="flex items-center justify-between p-3 bg-zinc-900/90 rounded-xl border border-zinc-800 text-xs">
                     <span class="font-bold text-zinc-200 flex items-center gap-2">💥 Tapa na Mesa (Pancada)</span>
                     <button id="toggle-slam-btn" class="font-bold px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-500 transition-colors">Ativado</button>
@@ -887,6 +970,62 @@
                             <span class="text-red-400 bg-black/50 px-2 py-0.5 rounded border border-zinc-700">7♦ (Sete Ouros)</span>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOAST DE SINAL SECRETO (TRUCO RAIZ) -->
+        <div id="secret-signal-toast" class="hidden absolute top-20 left-1/2 -translate-x-1/2 z-[75] bg-zinc-950/95 border-2 border-amber-400/90 text-white px-5 py-3 rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.4)] flex items-center gap-3 backdrop-blur-xl transition-all duration-300 pointer-events-none">
+            <div id="secret-signal-icon" class="text-2xl animate-bounce">🤫</div>
+            <div>
+                <div class="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <span>Sinal Secreto do Parceiro</span>
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                </div>
+                <div id="secret-signal-text" class="text-xs md:text-sm font-bold text-zinc-100">
+                    Carlos piscou o olho: <b>Zap!</b>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL HISTÓRICO DA MÃO / VAZAS (TRUCO RAIZ) -->
+        <div id="hand-log-modal" class="hidden absolute inset-0 glass-modal z-[89] flex items-center justify-center p-4">
+            <div class="bg-zinc-950/95 p-6 rounded-3xl border border-zinc-700/80 backdrop-blur-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]">
+                <div class="flex justify-between items-center mb-3 pb-2 border-b border-zinc-800">
+                    <h2 class="text-lg font-black text-amber-400 flex items-center gap-2">
+                        <i class="ph ph-scroll text-xl"></i> Histórico da Rodada
+                    </h2>
+                    <button id="btn-close-hand-log" class="text-zinc-400 hover:text-white transition-colors">
+                        <i class="ph ph-x text-2xl"></i>
+                    </button>
+                </div>
+
+                <div class="flex items-center justify-between p-2.5 bg-black/40 rounded-xl border border-zinc-800 mb-3 text-xs">
+                    <div>
+                        <span class="text-zinc-400">Vira da Mão:</span>
+                        <span id="hand-log-vira" class="font-bold text-white ml-1">—</span>
+                    </div>
+                    <div>
+                        <span class="text-zinc-400">Aposta Atual:</span>
+                        <span id="hand-log-value" class="font-black text-amber-400 ml-1">1 pt</span>
+                    </div>
+                    <div>
+                        <span class="text-zinc-400">Placar:</span>
+                        <span id="hand-log-score" class="font-black text-emerald-400 ml-1">0 × 0</span>
+                    </div>
+                </div>
+
+                <!-- Lista de Vazas e Eventos -->
+                <div id="hand-log-entries" class="flex-1 overflow-y-auto space-y-2.5 chat-scrollbar pr-1 text-xs">
+                    <div class="text-center text-zinc-500 py-6 italic text-xs">
+                        Nenhuma carta jogada nesta mão ainda.
+                    </div>
+                </div>
+
+                <div class="mt-3 pt-3 border-t border-zinc-800 text-center">
+                    <button id="btn-dismiss-hand-log" class="w-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 font-bold py-2 rounded-xl text-xs transition-colors">
+                        Fechar
+                    </button>
                 </div>
             </div>
         </div>

@@ -25,11 +25,12 @@ let selectedTitle  = localStorage.getItem('truco_title') || 'Truqueiro Raiz';
 let isSlamEnabled  = localStorage.getItem('truco_slam_enabled') !== 'false';
 let isSlamNextCard = false;
 
-// ─── Efeitos Sonoros com Web Audio API ─────────────────────────────────────────
+// ─── Efeitos Sonoros com Web Audio API Imersivo (Truco Raiz) ─────────────────
 class SoundFX {
     constructor() {
         this.ctx = null;
         this.enabled = true;
+        this.noiseBuffers = {};
     }
     init() {
         if (!this.ctx) {
@@ -37,129 +38,262 @@ class SoundFX {
             if (AudioCtx) this.ctx = new AudioCtx();
         }
         if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
+            this.ctx.resume().catch(() => {});
         }
+    }
+    getNoiseBuffer(duration = 0.1) {
+        if (!this.ctx) return null;
+        const key = duration.toFixed(2);
+        if (this.noiseBuffers[key]) return this.noiseBuffers[key];
+        const bufferSize = Math.max(1, Math.floor(this.ctx.sampleRate * duration));
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * 0.7;
+        }
+        this.noiseBuffers[key] = buffer;
+        return buffer;
+    }
+    playClick() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(950, now);
+            osc.frequency.exponentialRampToValueAtTime(180, now + 0.025);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.025);
+        } catch (e) {}
     }
     playCard() {
         if (!this.enabled) return;
         this.init();
         if (!this.ctx) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(180, now);
-        osc.frequency.exponentialRampToValueAtTime(40, now + 0.08);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.08);
-    }
-    playTruco() {
-        if (!this.enabled) return;
-        this.init();
-        if (!this.ctx) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(130, now);
-        osc.frequency.exponentialRampToValueAtTime(35, now + 0.35);
-        gain.gain.setValueAtTime(0.6, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.35);
-    }
-    playWin() {
-        if (!this.enabled) return;
-        this.init();
-        if (!this.ctx) return;
-        const now = this.ctx.currentTime;
-        [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+        try {
+            const now = this.ctx.currentTime;
+            // 1. Deslize físico de feltro (ruído filtrado)
+            const nBuffer = this.getNoiseBuffer(0.09);
+            if (nBuffer) {
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = nBuffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(1400, now);
+                filter.Q.setValueAtTime(1.8, now);
+                const nGain = this.ctx.createGain();
+                nGain.gain.setValueAtTime(0.01, now);
+                nGain.gain.linearRampToValueAtTime(0.22, now + 0.02);
+                nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+                noise.connect(filter);
+                filter.connect(nGain);
+                nGain.connect(this.ctx.destination);
+                noise.start(now);
+            }
+            // 2. Toque suave de papel cartão no feltro
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(freq, now + idx * 0.09);
-            gain.gain.setValueAtTime(0.25, now + idx * 0.09);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.09 + 0.25);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(150, now + 0.01);
+            osc.frequency.exponentialRampToValueAtTime(45, now + 0.08);
+            gain.gain.setValueAtTime(0.18, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
             osc.connect(gain);
             gain.connect(this.ctx.destination);
-            osc.start(now + idx * 0.09);
-            osc.stop(now + idx * 0.09 + 0.25);
-        });
+            osc.start(now + 0.01);
+            osc.stop(now + 0.08);
+        } catch (e) {}
     }
     playDeal() {
         if (!this.enabled) return;
         this.init();
         if (!this.ctx) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(280, now);
-        osc.frequency.exponentialRampToValueAtTime(90, now + 0.06);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.06);
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => this.playCard(), i * 65);
+        }
     }
-    playChat() {
+    playSignal() {
         if (!this.enabled) return;
         this.init();
         if (!this.ctx) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(440, now);
-        osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
-        gain.gain.setValueAtTime(0.08, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.08);
+        try {
+            const now = this.ctx.currentTime;
+            [880, 1174.66].forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+                gain.gain.setValueAtTime(0.13, now + idx * 0.09);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.22);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now + idx * 0.09);
+                osc.stop(now + idx * 0.09 + 0.22);
+            });
+        } catch (e) {}
+    }
+    playTruco() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            // Impacto grave marcante
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(160, now);
+            osc.frequency.exponentialRampToValueAtTime(40, now + 0.38);
+            gain.gain.setValueAtTime(0.75, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(400, now);
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.38);
+
+            // Tensão de desafio de Truco
+            const horn = this.ctx.createOscillator();
+            const hGain = this.ctx.createGain();
+            horn.type = 'triangle';
+            horn.frequency.setValueAtTime(220, now + 0.03);
+            horn.frequency.linearRampToValueAtTime(330, now + 0.12);
+            hGain.gain.setValueAtTime(0.01, now + 0.03);
+            hGain.gain.linearRampToValueAtTime(0.38, now + 0.1);
+            hGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+            horn.connect(hGain);
+            hGain.connect(this.ctx.destination);
+            horn.start(now + 0.03);
+            horn.stop(now + 0.42);
+        } catch (e) {}
     }
     playSlam() {
         if (!this.enabled) return;
         this.init();
         if (!this.ctx) return;
-        const now = this.ctx.currentTime;
+        try {
+            const now = this.ctx.currentTime;
+            // Pancada sub-bass na madeira
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+            gain.gain.setValueAtTime(0.95, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.32);
 
-        // Pancada grave (boom)
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(160, now);
-        osc.frequency.exponentialRampToValueAtTime(32, now + 0.2);
-        gain.gain.setValueAtTime(0.95, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.24);
+            // Estalo de impacto de madeira
+            const nBuffer = this.getNoiseBuffer(0.12);
+            if (nBuffer) {
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = nBuffer;
+                const nFilter = this.ctx.createBiquadFilter();
+                nFilter.type = 'lowpass';
+                nFilter.frequency.setValueAtTime(750, now);
+                const nGain = this.ctx.createGain();
+                nGain.gain.setValueAtTime(0.65, now);
+                nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                noise.connect(nFilter);
+                nFilter.connect(nGain);
+                nGain.connect(this.ctx.destination);
+                noise.start(now);
+            }
 
-        // Estalo na madeira (snap)
-        const snap = this.ctx.createOscillator();
-        const snapGain = this.ctx.createGain();
-        snap.type = 'sawtooth';
-        snap.frequency.setValueAtTime(380, now);
-        snap.frequency.exponentialRampToValueAtTime(60, now + 0.07);
-        snapGain.gain.setValueAtTime(0.4, now);
-        snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-        snap.connect(snapGain);
-        snapGain.connect(this.ctx.destination);
-        snap.start(now);
-        snap.stop(now + 0.07);
+            const snap = this.ctx.createOscillator();
+            const snapGain = this.ctx.createGain();
+            snap.type = 'triangle';
+            snap.frequency.setValueAtTime(340, now);
+            snap.frequency.exponentialRampToValueAtTime(60, now + 0.08);
+            snapGain.gain.setValueAtTime(0.45, now);
+            snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+            snap.connect(snapGain);
+            snapGain.connect(this.ctx.destination);
+            snap.start(now);
+            snap.stop(now + 0.08);
+        } catch (e) {}
+    }
+    playWin() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+                gain.gain.setValueAtTime(0.25, now + idx * 0.09);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.28);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now + idx * 0.09);
+                osc.stop(now + idx * 0.09 + 0.28);
+            });
+        } catch (e) {}
+    }
+    playChat() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(480, now);
+            osc.frequency.exponentialRampToValueAtTime(920, now + 0.07);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.07);
+        } catch (e) {}
     }
 }
 const sfx = new SoundFX();
+
+// ─── Sinais Secretos & Histórico da Rodada ──────────────────────────────────────
+const SECRET_SIGNALS = {
+    piscar:      { emoji: '😉', name: 'Piscou o olho',        meaning: 'Zap / Manilha Maior',          color: 'text-amber-400' },
+    biquinho:    { emoji: '😗', name: 'Fez biquinho',          meaning: '7 de Copas / Segunda Manilha', color: 'text-red-400' },
+    sobrancelha: { emoji: '🤨', name: 'Ergueu a sobrancelha',  meaning: 'Espadilha / Terceira Manilha', color: 'text-sky-400' },
+    nariz:       { emoji: '👃', name: 'Coçou o nariz',         meaning: '7 de Ouros / Pica-fumo',       color: 'text-yellow-400' },
+    bocejo:      { emoji: '🥱', name: 'Bocejou',               meaning: 'Tô liso / Sem carta boa',      color: 'text-zinc-400' },
+    peito:       { emoji: '✊', name: 'Bateu no peito',        meaning: 'Pede Truco que eu garanto!',   color: 'text-emerald-400' }
+};
+
+let currentHandLog = {
+    handNumber: 1,
+    vira: null,
+    handValue: 1,
+    tricks: [
+        { plays: [], winnerTeam: null, isTie: false, decisivePlayer: null },
+        { plays: [], winnerTeam: null, isTie: false, decisivePlayer: null },
+        { plays: [], winnerTeam: null, isTie: false, decisivePlayer: null }
+    ],
+    trucoEvents: [],
+    handWinner: null,
+    endMessage: null
+};
+
+let signalToastTimer = null;
 
 function escapeHTML(str) {
     if (!str) return '';
@@ -834,6 +968,33 @@ socket.on('updateState', (state) => {
         document.getElementById('right-cards').innerHTML  = Array(state.hand.length).fill(createFaceDownCardHTML(true)).join('');
     }
 
+    // Controle de exibição de Sinais Secretos (2v2 apenas)
+    const signalsContainer = document.getElementById('signals-container');
+    if (signalsContainer) {
+        signalsContainer.style.display = is1v1 ? 'none' : 'inline-block';
+    }
+
+    // Detecção e inicialização de nova mão no Histórico de Vazas (Truco Raiz)
+    const isNewHand = !state.trickResults || state.trickResults.every(r => r === undefined);
+    if (isNewHand && (!currentHandLog.vira || currentHandLog.vira.value !== state.vira?.value || currentHandLog.vira.suit !== state.vira?.suit || (state.hand && state.hand.length === 3 && currentHandLog.tricks[0].plays.length > 0))) {
+        currentHandLog = {
+            handNumber: (currentHandLog.handNumber || 0) + 1,
+            vira: state.vira,
+            handValue: state.handValue || 1,
+            tricks: [
+                { plays: [], winnerTeam: null, isTie: false, decisivePlayer: null },
+                { plays: [], winnerTeam: null, isTie: false, decisivePlayer: null },
+                { plays: [], winnerTeam: null, isTie: false, decisivePlayer: null }
+            ],
+            trucoEvents: [],
+            handWinner: null,
+            endMessage: null
+        };
+    } else if (state.vira) {
+        currentHandLog.vira = state.vira;
+        currentHandLog.handValue = state.handValue || 1;
+    }
+
     // ── Placar ───────────────────────────────────────────────────────────────
     document.getElementById('sidebar-score-teamA').textContent = state.score[0];
     document.getElementById('mobile-score-teamA').textContent  = state.score[0];
@@ -1035,6 +1196,21 @@ socket.on('cardPlayed', (data) => {
     clearTrickCleanTimer();
     isPlayingCard = false;
 
+    // Registra no Histórico da Rodada (Truco Raiz)
+    const currentTrickIdx = Math.min(2, Math.max(0, currentHandLog.tricks.findIndex(t => t.winnerTeam === null && !t.isTie)));
+    const playerObj = globalPlayers.find(p => p.id === data.playerId);
+    const pName = playerObj ? playerObj.name : 'Jogador';
+    if (currentHandLog.tricks[currentTrickIdx]) {
+        currentHandLog.tricks[currentTrickIdx].plays.push({
+            playerId: data.playerId,
+            playerName: pName,
+            card: data.card,
+            isManilha: data.isManilha,
+            isSlam: data.isSlam,
+            hidden: data.card?.hidden
+        });
+    }
+
     if (data.playerId === socket.id) {
         // Encontra e remove a carta que acabou de ser jogada da mão do jogador
         const myCardsDiv = document.getElementById('my-cards');
@@ -1069,6 +1245,20 @@ socket.on('cardPlayed', (data) => {
 socket.on('trickEnded', (data) => {
     clearTrickCleanTimer();
 
+    // Atualiza vencedor no Histórico da Rodada (Truco Raiz)
+    const endedTrickIdx = Math.min(2, Math.max(0, currentHandLog.tricks.findIndex(t => t.winnerTeam === null && !t.isTie)));
+    if (currentHandLog.tricks[endedTrickIdx]) {
+        if (data.winnerTeam === -1) {
+            currentHandLog.tricks[endedTrickIdx].isTie = true;
+        } else {
+            currentHandLog.tricks[endedTrickIdx].winnerTeam = data.winnerTeam;
+            if (data.topPlayerId) {
+                const topP = globalPlayers.find(p => p.id === data.topPlayerId);
+                currentHandLog.tricks[endedTrickIdx].decisivePlayer = topP ? topP.name : null;
+            }
+        }
+    }
+
     // Desativa turno imediatamente durante a transição
     isMyTurn = false;
     document.getElementById('my-turn-indicator').classList.add('hidden');
@@ -1096,6 +1286,10 @@ socket.on('handEnded', (data) => {
     document.getElementById('action-buttons').style.display = 'none';
     document.querySelectorAll('.player-tag').forEach(el => el.classList.remove('player-turn-active'));
     document.getElementById('played-cards').innerHTML = '';
+
+    // Registra desfecho da mão no Histórico da Rodada
+    currentHandLog.handWinner = data.winnerTeam;
+    currentHandLog.endMessage = data.message;
 
     const isWinner = (data.winnerTeam === myTeam);
     if (isWinner) sfx.playWin();
@@ -1255,6 +1449,13 @@ socket.on('trucoRequested', (data) => {
     isPlayingCard = false;
     triggerTrucoSplash(data.newValue);
 
+    // Registra pedido de Truco no Histórico da Rodada (Truco Raiz)
+    currentHandLog.trucoEvents.push({
+        text: `${data.requestedByName || 'Jogador'} pediu ${data.newValue === 3 ? 'TRUCO' : (data.newValue === 6 ? 'SEIS' : (data.newValue === 9 ? 'NOVE' : 'DOZE'))}! (Vale ${data.newValue} pts)`,
+        newValue: data.newValue
+    });
+    currentHandLog.handValue = data.newValue;
+
     // Bloqueia cartas da mão durante a decisão do truco
     const myCardsDiv = document.getElementById('my-cards');
     if (myCardsDiv) {
@@ -1341,6 +1542,13 @@ socket.on('trucoAccepted', (data) => {
     currentTrucoAnsweringTeam = -1;
     isPlayingCard = false;
     document.getElementById('truco-modal').classList.add('hidden');
+
+    // Registra aceitação de Truco no Histórico da Rodada (Truco Raiz)
+    currentHandLog.trucoEvents.push({
+        text: `Truco Aceito! Rodada valendo ${data.newValue} pontos.`,
+        newValue: data.newValue
+    });
+    currentHandLog.handValue = data.newValue;
     
     // Restaura interatividade da mão do jogador
     const myCardsDiv = document.getElementById('my-cards');
@@ -1363,6 +1571,12 @@ socket.on('trucoCanceled', () => {
     currentTrucoAnsweringTeam = -1;
     isPlayingCard = false;
     document.getElementById('truco-modal').classList.add('hidden');
+
+    // Registra recusa de Truco no Histórico da Rodada (Truco Raiz)
+    currentHandLog.trucoEvents.push({
+        text: `Equipe adversária correu do Truco!`,
+        newValue: currentHandLog.handValue
+    });
 
     const myCardsDiv = document.getElementById('my-cards');
     if (myCardsDiv) {
@@ -1580,6 +1794,202 @@ socket.on('chatMessageReceived', (data) => {
     }
 });
 
+// ─── Histórico da Rodada / Vazas (Truco Raiz) ─────────────────────────────────
+function renderHandLogModal() {
+    const modal = document.getElementById('hand-log-modal');
+    if (!modal) return;
+
+    // Vira
+    const viraEl = document.getElementById('hand-log-vira');
+    if (currentHandLog.vira) {
+        const style = getCardStyle(currentHandLog.vira.suit);
+        viraEl.innerHTML = `<span class="font-black ${style.color}">${currentHandLog.vira.value}${style.symbol}</span>`;
+    } else {
+        viraEl.textContent = currentVariant === 'mineiro' ? 'Mineiro Fixo' : '—';
+    }
+
+    // Valor da mão
+    document.getElementById('hand-log-value').textContent = `${currentHandLog.handValue || 1} pt(s)`;
+
+    // Placar atual
+    const scoreA = document.getElementById('sidebar-score-teamA')?.textContent || '0';
+    const scoreB = document.getElementById('sidebar-score-teamB')?.textContent || '0';
+    document.getElementById('hand-log-score').textContent = `${scoreA} × ${scoreB}`;
+
+    // Entries
+    const entriesDiv = document.getElementById('hand-log-entries');
+    entriesDiv.innerHTML = '';
+
+    let hasAnyPlays = false;
+    currentHandLog.tricks.forEach((trick, idx) => {
+        if (trick.plays.length === 0 && trick.winnerTeam === null && !trick.isTie) return;
+        hasAnyPlays = true;
+
+        const trickCard = document.createElement('div');
+        trickCard.className = 'p-3 bg-zinc-900/90 rounded-2xl border border-zinc-800 flex flex-col gap-2';
+
+        let statusBadge = '<span class="text-[10px] text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded font-bold">Em disputa</span>';
+        if (trick.isTie) {
+            statusBadge = '<span class="text-[10px] text-amber-300 bg-amber-950/60 border border-amber-600/40 px-2 py-0.5 rounded font-black">Embuchou / Cangada ⚔️</span>';
+        } else if (trick.winnerTeam !== null) {
+            const teamColor = trick.winnerTeam === 0 ? 'text-blue-400 bg-blue-950/60 border-blue-600/40' : 'text-red-400 bg-red-950/60 border-red-600/40';
+            const teamLabel = trick.winnerTeam === 0 ? 'Equipe A' : 'Equipe B';
+            const winnerInfo = trick.decisivePlayer ? ` (${trick.decisivePlayer})` : '';
+            statusBadge = `<span class="text-[10px] ${teamColor} border px-2 py-0.5 rounded font-black">Vitória: ${teamLabel}${winnerInfo}</span>`;
+        }
+
+        let playsHTML = '';
+        trick.plays.forEach(p => {
+            let cardLabel = '';
+            if (p.hidden) {
+                cardLabel = '<span class="bg-zinc-800 text-zinc-400 border border-zinc-700 px-2 py-0.5 rounded text-[11px] font-mono">🙈 Oculta</span>';
+            } else if (p.card) {
+                const style = getCardStyle(p.card.suit);
+                const manilhaTag = p.isManilha ? '<span class="text-[9px] bg-amber-500 text-black px-1.5 py-0.2 rounded font-black uppercase tracking-wider ml-1">Manilha</span>' : '';
+                const slamTag = p.isSlam ? '<span class="text-[9px] bg-red-600 text-white px-1.5 py-0.2 rounded font-black uppercase tracking-wider ml-1">💥 Pancada</span>' : '';
+                cardLabel = `<span class="bg-black/50 ${style.color} border border-zinc-700 px-2 py-0.5 rounded text-[11px] font-bold font-mono">${p.card.value}${style.symbol}</span>${manilhaTag}${slamTag}`;
+            }
+            playsHTML += `
+                <div class="flex items-center justify-between py-1 border-b border-zinc-800/60 last:border-0">
+                    <span class="text-zinc-200 font-semibold flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
+                        ${escapeHTML(p.playerName)}
+                    </span>
+                    <div>${cardLabel}</div>
+                </div>
+            `;
+        });
+
+        trickCard.innerHTML = `
+            <div class="flex items-center justify-between pb-1 border-b border-zinc-800">
+                <span class="font-black text-xs uppercase tracking-wider text-amber-400">${idx + 1}ª Vaza</span>
+                ${statusBadge}
+            </div>
+            <div class="flex flex-col">
+                ${playsHTML || '<span class="text-zinc-500 italic text-[11px]">Aguardando jogadas...</span>'}
+            </div>
+        `;
+        entriesDiv.appendChild(trickCard);
+    });
+
+    // Truco events banner if any
+    if (currentHandLog.trucoEvents.length > 0) {
+        const trucoCard = document.createElement('div');
+        trucoCard.className = 'p-2.5 bg-red-950/40 rounded-xl border border-red-500/40 flex flex-col gap-1';
+        let eventsHTML = '';
+        currentHandLog.trucoEvents.forEach(te => {
+            eventsHTML += `<div class="text-[11px] font-bold text-red-300 flex items-center gap-1.5"><i class="ph ph-fire text-amber-400"></i> ${escapeHTML(te.text)}</div>`;
+        });
+        trucoCard.innerHTML = `
+            <div class="font-extrabold text-[10px] uppercase tracking-wider text-amber-400">Aumentos de Aposta (Truco)</div>
+            ${eventsHTML}
+        `;
+        entriesDiv.appendChild(trucoCard);
+    }
+
+    if (!hasAnyPlays && currentHandLog.trucoEvents.length === 0) {
+        entriesDiv.innerHTML = `
+            <div class="text-center text-zinc-500 py-6 italic text-xs">
+                Nenhuma carta jogada nesta mão ainda. As vazas aparecerão aqui em tempo real!
+            </div>
+        `;
+    }
+}
+
+// ─── Sinais Secretos de Dupla (Truco Raiz) ─────────────────────────────────────
+function setupSecretSignals() {
+    const btnSignals = document.getElementById('btn-signals');
+    const signalsMenu = document.getElementById('signals-menu');
+    if (!btnSignals || !signalsMenu) return;
+
+    btnSignals.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sfx.playClick();
+        signalsMenu.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('.signal-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const signalId = btn.dataset.signal;
+            const sig = SECRET_SIGNALS[signalId];
+            signalsMenu.classList.add('hidden');
+
+            if (!currentRoomCode || !sig) return;
+
+            sfx.playClick();
+            socket.emit('sendSecretSignal', { roomCode: currentRoomCode, signalId });
+            showNotification(`🤫 Você fez o sinal: ${sig.name} (${sig.meaning})`, 'border-amber-400 text-amber-300');
+        });
+    });
+
+    // Fecha ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (!signalsMenu.contains(e.target) && e.target !== btnSignals) {
+            signalsMenu.classList.add('hidden');
+        }
+    });
+}
+setupSecretSignals();
+
+socket.on('secretSignalReceived', (data) => {
+    const sig = SECRET_SIGNALS[data.signalId];
+    if (!sig) return;
+
+    sfx.playSignal();
+
+    const toast = document.getElementById('secret-signal-toast');
+    const toastIcon = document.getElementById('secret-signal-icon');
+    const toastText = document.getElementById('secret-signal-text');
+
+    if (toast && toastIcon && toastText) {
+        toastIcon.textContent = sig.emoji;
+        toastText.innerHTML = `${escapeHTML(data.senderName || 'Parceiro')} fez o sinal: <b>${sig.name}</b> <span class="block ${sig.color} text-[11px] font-bold">(${sig.meaning})</span>`;
+
+        toast.classList.remove('hidden');
+
+        if (signalToastTimer) clearTimeout(signalToastTimer);
+        signalToastTimer = setTimeout(() => {
+            toast.classList.add('hidden');
+            signalToastTimer = null;
+        }, 4000);
+    }
+
+    // Mini balão secreto sobre o parceiro na mesa
+    const partnerNameEl = document.getElementById('partner-name');
+    if (partnerNameEl) {
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-speech-bubble bg-amber-950/90 text-amber-300 border-amber-500/60';
+        bubble.innerHTML = `${sig.emoji} <span class="font-black">${sig.name}</span>`;
+        partnerNameEl.appendChild(bubble);
+        setTimeout(() => bubble.remove(), 3500);
+    }
+});
+
+// ─── Controles de Modais & Menus ──────────────────────────────────────────────
+const btnHandLog        = document.getElementById('btn-hand-log');
+const btnMenuHandLog    = document.getElementById('btn-menu-hand-log');
+const handLogModal      = document.getElementById('hand-log-modal');
+const btnCloseHandLog   = document.getElementById('btn-close-hand-log');
+const btnDismissHandLog = document.getElementById('btn-dismiss-hand-log');
+
+function openHandLog() {
+    sfx.playClick();
+    renderHandLogModal();
+    if (gameMenuModal) gameMenuModal.classList.add('hidden');
+    if (handLogModal)  handLogModal.classList.remove('hidden');
+}
+
+function closeHandLog() {
+    sfx.playClick();
+    if (handLogModal) handLogModal.classList.add('hidden');
+}
+
+if (btnHandLog)        btnHandLog.addEventListener('click', openHandLog);
+if (btnMenuHandLog)    btnMenuHandLog.addEventListener('click', openHandLog);
+if (btnCloseHandLog)   btnCloseHandLog.addEventListener('click', closeHandLog);
+if (btnDismissHandLog) btnDismissHandLog.addEventListener('click', closeHandLog);
+
 // ─── Game Menu, Regras & Tecla Escape ─────────────────────────────────────────
 const btnGameMenu      = document.getElementById('btn-game-menu');
 const gameMenuModal    = document.getElementById('game-menu-modal');
@@ -1604,12 +2014,13 @@ function updateSlamUI() {
 }
 updateSlamUI();
 
-if (btnGameMenu)      btnGameMenu.addEventListener('click', () => gameMenuModal.classList.remove('hidden'));
-if (btnCloseGameMenu) btnCloseGameMenu.addEventListener('click', () => gameMenuModal.classList.add('hidden'));
-if (btnMenuResume)    btnMenuResume.addEventListener('click', () => gameMenuModal.classList.add('hidden'));
+if (btnGameMenu)      btnGameMenu.addEventListener('click', () => { sfx.playClick(); gameMenuModal.classList.remove('hidden'); });
+if (btnCloseGameMenu) btnCloseGameMenu.addEventListener('click', () => { sfx.playClick(); gameMenuModal.classList.add('hidden'); });
+if (btnMenuResume)    btnMenuResume.addEventListener('click', () => { sfx.playClick(); gameMenuModal.classList.add('hidden'); });
 
 if (toggleSlamBtn) {
     toggleSlamBtn.addEventListener('click', () => {
+        sfx.playClick();
         isSlamEnabled = !isSlamEnabled;
         localStorage.setItem('truco_slam_enabled', isSlamEnabled);
         updateSlamUI();
@@ -1619,14 +2030,16 @@ if (toggleSlamBtn) {
 
 if (btnMenuRules) {
     btnMenuRules.addEventListener('click', () => {
+        sfx.playClick();
         gameMenuModal.classList.add('hidden');
         rulesModal.classList.remove('hidden');
     });
 }
-if (btnCloseRules) btnCloseRules.addEventListener('click', () => rulesModal.classList.add('hidden'));
+if (btnCloseRules) btnCloseRules.addEventListener('click', () => { sfx.playClick(); rulesModal.classList.add('hidden'); });
 
 if (btnMenuSettings) {
     btnMenuSettings.addEventListener('click', () => {
+        sfx.playClick();
         gameMenuModal.classList.add('hidden');
         settingsModal.classList.remove('hidden');
     });
@@ -1634,6 +2047,7 @@ if (btnMenuSettings) {
 
 if (btnMenuLeave) {
     btnMenuLeave.addEventListener('click', () => {
+        sfx.playClick();
         if (confirm('Tem certeza de que deseja sair da partida e retornar ao lobby?')) {
             localStorage.removeItem('truco_current_room');
             socket.emit('leaveRoom', { roomCode: currentRoomCode });
@@ -1644,7 +2058,12 @@ if (btnMenuLeave) {
 
 window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        if (rulesModal && !rulesModal.classList.contains('hidden')) {
+        const signalsMenu = document.getElementById('signals-menu');
+        if (signalsMenu && !signalsMenu.classList.contains('hidden')) {
+            signalsMenu.classList.add('hidden');
+        } else if (handLogModal && !handLogModal.classList.contains('hidden')) {
+            handLogModal.classList.add('hidden');
+        } else if (rulesModal && !rulesModal.classList.contains('hidden')) {
             rulesModal.classList.add('hidden');
         } else if (settingsModal && !settingsModal.classList.contains('hidden')) {
             settingsModal.classList.add('hidden');
