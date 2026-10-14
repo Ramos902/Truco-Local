@@ -19,6 +19,12 @@ if (!userToken) {
     sessionStorage.setItem('trucoToken', userToken);
 }
 
+// ─── Customização de Avatar e Pancada ──────────────────────────────────────────
+let selectedAvatar = localStorage.getItem('truco_avatar') || '🤠';
+let selectedTitle  = localStorage.getItem('truco_title') || 'Truqueiro Raiz';
+let isSlamEnabled  = localStorage.getItem('truco_slam_enabled') !== 'false';
+let isSlamNextCard = false;
+
 // ─── Efeitos Sonoros com Web Audio API ─────────────────────────────────────────
 class SoundFX {
     constructor() {
@@ -120,8 +126,69 @@ class SoundFX {
         osc.start(now);
         osc.stop(now + 0.08);
     }
+    playSlam() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+
+        // Pancada grave (boom)
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(32, now + 0.2);
+        gain.gain.setValueAtTime(0.95, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.24);
+
+        // Estalo na madeira (snap)
+        const snap = this.ctx.createOscillator();
+        const snapGain = this.ctx.createGain();
+        snap.type = 'sawtooth';
+        snap.frequency.setValueAtTime(380, now);
+        snap.frequency.exponentialRampToValueAtTime(60, now + 0.07);
+        snapGain.gain.setValueAtTime(0.4, now);
+        snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+        snap.connect(snapGain);
+        snapGain.connect(this.ctx.destination);
+        snap.start(now);
+        snap.stop(now + 0.07);
+    }
 }
 const sfx = new SoundFX();
+
+function escapeHTML(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// ─── Efeito Visual & Sonoro "Tapa na Mesa" (Pancada) ─────────────────────────
+function triggerTableSlam() {
+    if (!isSlamEnabled) return;
+    sfx.playSlam();
+
+    const tableContainer = document.getElementById('game-main-container');
+    if (tableContainer) {
+        tableContainer.classList.remove('table-slam-shake');
+        void tableContainer.offsetWidth;
+        tableContainer.classList.add('table-slam-shake');
+        setTimeout(() => tableContainer.classList.remove('table-slam-shake'), 380);
+    }
+
+    const playedCardsArea = document.getElementById('played-cards');
+    if (playedCardsArea) {
+        const shockwave = document.createElement('div');
+        shockwave.className = 'slam-shockwave';
+        playedCardsArea.appendChild(shockwave);
+        setTimeout(() => shockwave.remove(), 480);
+    }
+}
 
 // ─── Limpeza Segura de Timers ─────────────────────────────────────────────────
 function clearTrickCleanTimer() {
@@ -130,6 +197,303 @@ function clearTrickCleanTimer() {
         trickCleanTimer = null;
     }
 }
+
+// ─── Escolha de Avatar & Título no Lobby ──────────────────────────────────────
+const avatarDisplay = document.getElementById('selected-avatar-display');
+const titleSelect   = document.getElementById('playerTitle');
+if (avatarDisplay) avatarDisplay.textContent = selectedAvatar;
+if (titleSelect)   titleSelect.value = selectedTitle;
+
+document.querySelectorAll('.avatar-btn').forEach(btn => {
+    if (btn.dataset.avatar === selectedAvatar) {
+        btn.classList.add('active-avatar');
+    } else {
+        btn.classList.remove('active-avatar');
+    }
+    btn.addEventListener('click', () => {
+        selectedAvatar = btn.dataset.avatar;
+        localStorage.setItem('truco_avatar', selectedAvatar);
+        document.querySelectorAll('.avatar-btn').forEach(b => b.classList.remove('active-avatar'));
+        btn.classList.add('active-avatar');
+        if (avatarDisplay) avatarDisplay.textContent = selectedAvatar;
+    });
+});
+
+if (titleSelect) {
+    titleSelect.addEventListener('change', () => {
+        selectedTitle = titleSelect.value;
+        localStorage.setItem('truco_title', selectedTitle);
+    });
+}
+
+// ─── Nome do Jogador (Persistência) ───────────────────────────────────────────
+const playerNameInput = document.getElementById('playerName');
+if (playerNameInput) {
+    playerNameInput.value = localStorage.getItem('truco_player_name') || '';
+    playerNameInput.addEventListener('input', () => {
+        localStorage.setItem('truco_player_name', playerNameInput.value.trim());
+    });
+}
+
+// ─── Navegação de Abas do Lobby ───────────────────────────────────────────────
+const tabBtnCreate   = document.getElementById('tab-btn-create');
+const tabBtnJoin     = document.getElementById('tab-btn-join');
+const tabBtnSettings = document.getElementById('tab-btn-settings');
+
+const tabContentCreate   = document.getElementById('tab-content-create');
+const tabContentJoin     = document.getElementById('tab-content-join');
+const tabContentSettings = document.getElementById('tab-content-settings');
+
+function switchLobbyTab(tab) {
+    [tabBtnCreate, tabBtnJoin, tabBtnSettings].forEach(b => { if (b) b.classList.remove('active-tab'); });
+    [tabContentCreate, tabContentJoin, tabContentSettings].forEach(c => { if (c) c.classList.add('hidden'); });
+
+    if (tab === 'create') {
+        if (tabBtnCreate) tabBtnCreate.classList.add('active-tab');
+        if (tabContentCreate) tabContentCreate.classList.remove('hidden');
+    } else if (tab === 'join') {
+        if (tabBtnJoin) tabBtnJoin.classList.add('active-tab');
+        if (tabContentJoin) tabContentJoin.classList.remove('hidden');
+        requestRecentRooms();
+    } else if (tab === 'settings') {
+        if (tabBtnSettings) tabBtnSettings.classList.add('active-tab');
+        if (tabContentSettings) tabContentSettings.classList.remove('hidden');
+        updateLobbySettingsUI();
+    }
+}
+
+if (tabBtnCreate)   tabBtnCreate.addEventListener('click', () => switchLobbyTab('create'));
+if (tabBtnJoin)     tabBtnJoin.addEventListener('click', () => switchLobbyTab('join'));
+if (tabBtnSettings) tabBtnSettings.addEventListener('click', () => switchLobbyTab('settings'));
+
+// ─── Configurações no Lobby ───────────────────────────────────────────────────
+const lobbyToggleSound = document.getElementById('lobby-toggle-sound');
+const lobbyToggleSlam  = document.getElementById('lobby-toggle-slam');
+const lobbyBtnRules    = document.getElementById('lobby-btn-rules');
+
+function updateLobbySettingsUI() {
+    if (lobbyToggleSound) {
+        lobbyToggleSound.textContent = sfx.enabled ? 'Ativado' : 'Silenciado';
+        lobbyToggleSound.className = sfx.enabled
+            ? 'font-bold px-3 py-1 rounded-lg bg-green-600 text-white transition-colors'
+            : 'font-bold px-3 py-1 rounded-lg bg-zinc-700 text-zinc-300 transition-colors';
+    }
+    if (lobbyToggleSlam) {
+        lobbyToggleSlam.textContent = isSlamEnabled ? 'Ativado' : 'Desativado';
+        lobbyToggleSlam.className = isSlamEnabled
+            ? 'font-bold px-3 py-1 rounded-lg bg-green-600 text-white transition-colors'
+            : 'font-bold px-3 py-1 rounded-lg bg-zinc-700 text-zinc-300 transition-colors';
+    }
+}
+
+if (lobbyToggleSound) {
+    lobbyToggleSound.addEventListener('click', () => {
+        sfx.enabled = !sfx.enabled;
+        updateSoundUI();
+        updateLobbySettingsUI();
+        showNotification(sfx.enabled ? "Sons Ativados" : "Sons Silenciados", "border-blue-500 text-blue-400");
+    });
+}
+
+if (lobbyToggleSlam) {
+    lobbyToggleSlam.addEventListener('click', () => {
+        isSlamEnabled = !isSlamEnabled;
+        localStorage.setItem('truco_slam_enabled', isSlamEnabled);
+        updateSlamUI();
+        updateLobbySettingsUI();
+        showNotification(isSlamEnabled ? "Pancadas Ativadas!" : "Pancadas Desativadas", "border-amber-500 text-amber-400");
+    });
+}
+
+if (lobbyBtnRules) {
+    lobbyBtnRules.addEventListener('click', () => {
+        const rulesModal = document.getElementById('rules-modal');
+        if (rulesModal) rulesModal.classList.remove('hidden');
+    });
+}
+
+// ─── Histórico de Salas Recentes & Pontuação ──────────────────────────────────
+function getStoredRecentRooms() {
+    try {
+        const raw = localStorage.getItem('truco_recent_rooms');
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveRecentRoom(roomCode, info = {}) {
+    if (!roomCode) return;
+    let list = getStoredRecentRooms();
+    const existingIndex = list.findIndex(r => r.roomCode === roomCode);
+    const updatedItem = {
+        roomCode,
+        gameMode: info.gameMode || (existingIndex !== -1 ? list[existingIndex].gameMode : selectedGameMode),
+        variant: info.variant || (existingIndex !== -1 ? list[existingIndex].variant : selectedVariant),
+        scoreText: info.scoreText || (existingIndex !== -1 ? list[existingIndex].scoreText : 'Equipe A 0 × 0 Equipe B'),
+        score: info.score || (existingIndex !== -1 ? list[existingIndex].score : [0, 0]),
+        status: info.status || (existingIndex !== -1 ? list[existingIndex].status : 'waiting'),
+        updatedAt: Date.now()
+    };
+
+    if (existingIndex !== -1) {
+        list[existingIndex] = { ...list[existingIndex], ...updatedItem };
+    } else {
+        list.unshift(updatedItem);
+    }
+    list = list.slice(0, 10);
+    localStorage.setItem('truco_recent_rooms', JSON.stringify(list));
+}
+
+function updateRecentRoomScore(roomCode, score) {
+    if (!roomCode || !score) return;
+    const is1v1 = (currentGameMode === '1v1');
+    const teamA = is1v1 ? (globalPlayers[0]?.name || 'Jogador A') : 'Dupla A';
+    const teamB = is1v1 ? (globalPlayers[1]?.name || 'Jogador B') : 'Dupla B';
+    const isFinished = (score[0] >= 12 || score[1] >= 12);
+    const scoreText = `${teamA} ${score[0]} × ${score[1]} ${teamB}`;
+    
+    saveRecentRoom(roomCode, {
+        score,
+        scoreText,
+        status: isFinished ? 'finished' : 'playing',
+        gameMode: currentGameMode,
+        variant: currentVariant
+    });
+}
+
+function requestRecentRooms() {
+    const list = getStoredRecentRooms();
+    const localCodes = list.map(r => r.roomCode);
+    const activeRoom = localStorage.getItem('truco_current_room');
+    if (activeRoom && !localCodes.includes(activeRoom)) {
+        localCodes.unshift(activeRoom);
+    }
+    socket.emit('getRecentRoomsStatus', { token: userToken, localRoomCodes: localCodes });
+}
+
+function renderRecentRooms(serverRooms = []) {
+    const container = document.getElementById('recent-rooms-list');
+    if (!container) return;
+
+    // Sincroniza informações retornadas pelo servidor
+    serverRooms.forEach(sr => {
+        saveRecentRoom(sr.roomCode, {
+            gameMode: sr.gameMode,
+            variant: sr.variant,
+            scoreText: sr.scoreText,
+            score: sr.score,
+            status: sr.status
+        });
+    });
+
+    const stored = getStoredRecentRooms();
+
+    if (stored.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-4 bg-black/20 rounded-xl border border-zinc-800/80">
+                <p class="text-zinc-400 text-xs font-medium">Nenhuma sala recente.</p>
+                <p class="text-zinc-500 text-[10px] mt-0.5">Crie uma nova sala ou entre com um código acima!</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = stored.map(r => {
+        let statusBadge = '<span class="text-[9px] font-bold text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700">⏳ Aguardando</span>';
+        if (r.status === 'playing') {
+            statusBadge = '<span class="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-600/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Em andamento</span>';
+        } else if (r.status === 'finished') {
+            statusBadge = '<span class="text-[9px] font-bold text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-600/40">🏁 Finalizada</span>';
+        }
+
+        const variantBadge = r.variant === 'mineiro' ? 'Mineiro' : 'Paulista';
+        const modeBadge = r.gameMode === '1v1' ? '1v1' : '2v2';
+
+        return `
+            <div class="p-2.5 bg-black/40 rounded-xl border border-zinc-700/60 hover:border-zinc-500 flex items-center justify-between gap-2.5 transition-all">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5 mb-1 flex-wrap">
+                        <span class="font-mono font-black text-amber-400 text-xs tracking-wider bg-black/50 px-1.5 py-0.5 rounded border border-zinc-700">${escapeHTML(r.roomCode)}</span>
+                        <span class="text-[9px] font-bold text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700">${modeBadge} · ${variantBadge}</span>
+                        ${statusBadge}
+                    </div>
+                    <div class="text-xs font-black text-zinc-200 truncate flex items-center gap-1.5">
+                        <i class="ph ph-trophy text-amber-400 text-sm"></i>
+                        <span>${escapeHTML(r.scoreText || '0 × 0')}</span>
+                    </div>
+                </div>
+                <button type="button" class="btn-quick-join bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg shadow transition-all active:scale-95 shrink-0" data-code="${r.roomCode}">
+                    ${r.status === 'playing' ? 'Reconectar' : 'Entrar'}
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    container.querySelectorAll('.btn-quick-join').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const code = e.currentTarget.dataset.code;
+            if (code) {
+                document.getElementById('roomCode').value = code;
+                socket.emit('joinRoom', {
+                    roomCode: code,
+                    playerName: document.getElementById('playerName').value || 'Jogador',
+                    token: userToken,
+                    avatar: selectedAvatar,
+                    title: selectedTitle
+                });
+            }
+        });
+    });
+}
+
+socket.on('recentRoomsStatus', (roomsList) => {
+    renderRecentRooms(roomsList);
+
+    const activeMatch = roomsList.find(r => r.hasActiveMatch);
+    const activeBanner = document.getElementById('active-match-banner');
+    const activeInfo   = document.getElementById('active-match-info');
+
+    if (activeMatch && activeBanner) {
+        activeBanner.classList.remove('hidden');
+        if (activeInfo) {
+            activeInfo.textContent = `Sala: ${activeMatch.roomCode} · ${activeMatch.scoreText}`;
+        }
+        const btnReconnect = document.getElementById('btn-reconnect-active');
+        if (btnReconnect) {
+            btnReconnect.onclick = () => {
+                document.getElementById('roomCode').value = activeMatch.roomCode;
+                socket.emit('joinRoom', {
+                    roomCode: activeMatch.roomCode,
+                    playerName: document.getElementById('playerName').value || 'Jogador',
+                    token: userToken,
+                    avatar: selectedAvatar,
+                    title: selectedTitle
+                });
+            };
+        }
+        const btnDismiss = document.getElementById('btn-dismiss-active');
+        if (btnDismiss) {
+            btnDismiss.onclick = () => {
+                activeBanner.classList.add('hidden');
+            };
+        }
+    } else if (activeBanner) {
+        activeBanner.classList.add('hidden');
+    }
+});
+
+const btnRefreshRecent = document.getElementById('btn-refresh-recent');
+if (btnRefreshRecent) {
+    btnRefreshRecent.addEventListener('click', () => {
+        requestRecentRooms();
+        showNotification("Atualizando salas...", "border-blue-500 text-blue-400");
+    });
+}
+
+// Inicializa listagem recente e verifica partida ativa ao carregar
+requestRecentRooms();
+renderRecentRooms();
 
 // ─── Toggle de Modo / Variante no Lobby ─────────────────────────────────────
 document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -150,6 +514,8 @@ document.querySelectorAll('.variant-btn').forEach(btn => {
 
 function showGameScreen(code) {
     currentRoomCode = code;
+    localStorage.setItem('truco_current_room', code);
+    saveRecentRoom(code, { gameMode: currentGameMode, variant: currentVariant });
     document.getElementById('lobby-screen').classList.add('hidden');
     document.getElementById('game-screen').classList.remove('hidden');
     document.getElementById('displayRoomCode').textContent = code;
@@ -211,15 +577,19 @@ function createFaceDownCardHTML(isHorizontal = false) {
     return `<div class="card-back-style ${sizeClasses} rounded-lg shadow-md"></div>`;
 }
 
+let notificationTimer = null;
 function showNotification(msg, color = 'border-yellow-500 text-yellow-400') {
     const banner = document.getElementById('notification-banner');
+    if (!banner) return;
     banner.textContent = msg;
-    banner.className = `absolute top-10 right-10 glass-modal border-l-4 ${color} font-bold text-base md:text-lg px-6 py-4 rounded-xl shadow-2xl z-[80] translate-x-0 transition-all`;
+    banner.className = `absolute top-16 md:top-6 left-1/2 transform -translate-x-1/2 glass-modal border-l-4 ${color} font-bold text-sm md:text-base px-6 py-3 rounded-2xl shadow-2xl z-[80] pointer-events-none transition-all duration-300`;
     banner.classList.remove('hidden');
     
-    setTimeout(() => {
+    if (notificationTimer) clearTimeout(notificationTimer);
+    notificationTimer = setTimeout(() => {
         banner.classList.add('hidden');
-    }, 3200);
+        notificationTimer = null;
+    }, 3000);
 }
 
 function updateTurnUI(turnId) {
@@ -302,7 +672,9 @@ document.getElementById('btnCreate').addEventListener('click', () => {
         playerName: document.getElementById('playerName').value || 'Jogador',
         token: userToken,
         gameMode: selectedGameMode,
-        variant: selectedVariant
+        variant: selectedVariant,
+        avatar: selectedAvatar,
+        title: selectedTitle
     });
 });
 
@@ -310,7 +682,9 @@ document.getElementById('btnJoin').addEventListener('click', () => {
     socket.emit('joinRoom', {
         roomCode: document.getElementById('roomCode').value.toUpperCase(),
         playerName: document.getElementById('playerName').value || 'Jogador',
-        token: userToken
+        token: userToken,
+        avatar: selectedAvatar,
+        title: selectedTitle
     });
 });
 
@@ -423,10 +797,20 @@ socket.on('updateState', (state) => {
     const isMineiro = currentVariant === 'mineiro';
 
     const setPlayerInfo = (id, idx) => {
+        const p = globalPlayers[idx];
         const el = document.getElementById(id);
-        el.textContent = globalPlayers[idx].name;
-        el.dataset.id  = globalPlayers[idx].id;
-        el.className   = `text-white font-bold px-4 py-1 md:px-6 md:py-2 rounded-full text-xs md:text-base player-tag relative ${(idx % 2 === 0) ? 'team-a-border' : 'team-b-border'}`;
+        if (!p || !el) return;
+        const pAvatar = p.avatar || '🤠';
+        const pTitle  = p.title  || 'Truqueiro';
+        el.dataset.id = p.id;
+        el.className  = `text-white font-bold px-3 py-1 md:px-5 md:py-1.5 rounded-full text-xs md:text-sm player-tag relative flex items-center gap-1.5 md:gap-2 shadow-lg ${(idx % 2 === 0) ? 'team-a-border' : 'team-b-border'}`;
+        el.innerHTML  = `
+            <span class="text-base md:text-lg leading-none select-none">${pAvatar}</span>
+            <div class="flex flex-col text-left leading-tight">
+                <span class="font-extrabold truncate max-w-[85px] md:max-w-[125px]">${escapeHTML(p.name)}</span>
+                <span class="text-[9px] md:text-[10px] text-zinc-300 font-normal truncate max-w-[85px] md:max-w-[125px] opacity-80">${escapeHTML(pTitle)}</span>
+            </div>
+        `;
     };
 
     // ── Layout de Jogadores ──────────────────────────────────────────────────
@@ -457,6 +841,10 @@ socket.on('updateState', (state) => {
     document.getElementById('mobile-score-teamB').textContent  = state.score[1];
     document.getElementById('sidebar-hand-value').textContent  = state.handValue;
     document.getElementById('mobile-hand-value').textContent   = state.handValue;
+
+    if (state.score && currentRoomCode) {
+        updateRecentRoomScore(currentRoomCode, state.score);
+    }
 
     // ── Indicadores de Vaza ──────────────────────────────────────────────────
     ['sidebar-round-indicators', 'mobile-round-indicators'].forEach(containerId => {
@@ -513,7 +901,9 @@ socket.on('updateState', (state) => {
                 return;
             }
             isPlayingCard = true;
-            sfx.playCard();
+            if (!isSlamNextCard) {
+                sfx.playCard();
+            }
 
             // Marca a carta como enviando (SEM REMOVER DO DOM AINDA)
             wrap.classList.add('opacity-40', 'pointer-events-none', 'scale-95');
@@ -526,9 +916,22 @@ socket.on('updateState', (state) => {
                 }
             }, 2500);
 
-            socket.emit('playCard', { roomCode: currentRoomCode, card, hidden: isHidingNextCard });
+            socket.emit('playCard', {
+                roomCode: currentRoomCode,
+                card,
+                hidden: isHidingNextCard,
+                slam: isSlamNextCard
+            });
             isHidingNextCard = false;
             document.getElementById('btn-hide-card').classList.remove('bg-yellow-600');
+
+            if (isSlamNextCard) {
+                isSlamNextCard = false;
+                const bSlam = document.getElementById('btn-slam');
+                if (bSlam) {
+                    bSlam.classList.remove('ring-2', 'ring-amber-400', 'bg-amber-600');
+                }
+            }
         });
         myCardsDiv.appendChild(wrap);
     });
@@ -650,6 +1053,11 @@ socket.on('cardPlayed', (data) => {
                 el.firstElementChild.remove();
             }
         });
+    }
+
+    if (data.isSlam || data.isManilha) {
+        triggerTableSlam();
+    } else if (data.playerId !== socket.id) {
         sfx.playCard();
     }
 
@@ -727,6 +1135,41 @@ socket.on('gameOver', (data) => {
         descEl.textContent  = `${data.winnerTeam === 0 ? teamAName : teamBName} venceu a partida!`;
     }
 
+    // Destaque MVP
+    const mvpCard = document.getElementById('go-mvp-card');
+    if (data.mvp) {
+        if (mvpCard) mvpCard.classList.remove('hidden');
+        const goMvpAvatar = document.getElementById('go-mvp-avatar');
+        const goMvpName = document.getElementById('go-mvp-name');
+        const goMvpTitle = document.getElementById('go-mvp-title');
+        const goMvpTricks = document.getElementById('go-mvp-tricks');
+        const goMvpDecisive = document.getElementById('go-mvp-decisive');
+        const goMvpTrucos = document.getElementById('go-mvp-trucos');
+
+        if (goMvpAvatar) goMvpAvatar.textContent = data.mvp.avatar || '👑';
+        if (goMvpName) goMvpName.textContent = data.mvp.name || 'Jogador';
+        if (goMvpTitle) goMvpTitle.textContent = data.mvp.title || 'Mestre do Truco';
+        if (goMvpTricks) goMvpTricks.textContent = data.mvp.tricksWon || 0;
+        if (goMvpDecisive) goMvpDecisive.textContent = data.mvp.decisiveTricksWon || 0;
+        if (goMvpTrucos) goMvpTrucos.textContent = data.mvp.trucosWon || 0;
+    } else if (mvpCard) {
+        mvpCard.classList.add('hidden');
+    }
+
+    // Estatísticas da partida
+    if (data.stats) {
+        const handsEl = document.getElementById('go-stat-hands');
+        const trucosEl = document.getElementById('go-stat-trucos');
+        const maxValEl = document.getElementById('go-stat-maxval');
+        if (handsEl) handsEl.textContent = data.stats.handsPlayed || 0;
+        if (trucosEl) trucosEl.textContent = data.stats.trucosCalledCount || 0;
+        if (maxValEl) maxValEl.textContent = `${data.stats.maxTrucoValue || 1} pt${(data.stats.maxTrucoValue || 1) > 1 ? 's' : ''}`;
+    }
+
+    if (data.score && currentRoomCode) {
+        updateRecentRoomScore(currentRoomCode, data.score);
+    }
+
     modal.classList.remove('hidden');
 });
 
@@ -737,6 +1180,7 @@ document.getElementById('btn-play-again').addEventListener('click', () => {
 });
 
 document.getElementById('btn-back-lobby').addEventListener('click', () => {
+    localStorage.removeItem('truco_current_room');
     location.reload();
 });
 
@@ -752,6 +1196,19 @@ document.getElementById('btn-hide-card').addEventListener('click', (e) => {
     isHidingNextCard = !isHidingNextCard;
     e.currentTarget.classList.toggle('bg-yellow-600', isHidingNextCard);
 });
+
+const btnSlam = document.getElementById('btn-slam');
+if (btnSlam) {
+    btnSlam.addEventListener('click', () => {
+        isSlamNextCard = !isSlamNextCard;
+        btnSlam.classList.toggle('ring-2', isSlamNextCard);
+        btnSlam.classList.toggle('ring-amber-400', isSlamNextCard);
+        btnSlam.classList.toggle('bg-amber-600', isSlamNextCard);
+        if (isSlamNextCard) {
+            showNotification("💥 Pancada Armada! A mesa vai tremer!", "border-amber-500 text-amber-400");
+        }
+    });
+}
 
 document.getElementById('btn-truco').addEventListener('click', () => {
     if (currentTrucoAnsweringTeam !== -1) {
@@ -1077,12 +1534,6 @@ function showPlayerSpeechBubble(playerId, message) {
     }
 }
 
-function escapeHTML(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
 socket.on('chatMessageReceived', (data) => {
     if (!chatMessages) return;
 
@@ -1091,9 +1542,10 @@ socket.on('chatMessageReceived', (data) => {
     msgWrapper.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-full`;
 
     const teamColor = data.playerTeam === 0 ? 'text-blue-400' : 'text-red-400';
+    const pAvatar = data.playerAvatar || '🤠';
     const senderDisplay = isMe 
-        ? '<span class="text-emerald-400 font-bold">Você</span>' 
-        : `<span class="${teamColor} font-bold">${escapeHTML(data.playerName)}</span>`;
+        ? `<span class="text-emerald-400 font-bold flex items-center gap-1"><span class="text-xs select-none">${pAvatar}</span> Você</span>` 
+        : `<span class="flex items-center gap-1"><span class="text-xs select-none">${pAvatar}</span><span class="${teamColor} font-bold">${escapeHTML(data.playerName)}</span></span>`;
 
     const bubbleBg = isMe 
         ? 'bg-emerald-950/70 border-emerald-600/40 text-emerald-100' 
@@ -1126,4 +1578,84 @@ socket.on('chatMessageReceived', (data) => {
             chatUnreadBadge.classList.remove('hidden');
         }
     }
+});
+
+// ─── Game Menu, Regras & Tecla Escape ─────────────────────────────────────────
+const btnGameMenu      = document.getElementById('btn-game-menu');
+const gameMenuModal    = document.getElementById('game-menu-modal');
+const btnCloseGameMenu = document.getElementById('btn-close-game-menu');
+const btnMenuResume    = document.getElementById('btn-menu-resume');
+const toggleSlamBtn    = document.getElementById('toggle-slam-btn');
+const btnMenuRules     = document.getElementById('btn-menu-rules');
+const rulesModal       = document.getElementById('rules-modal');
+const btnCloseRules    = document.getElementById('btn-close-rules');
+const btnMenuSettings  = document.getElementById('btn-menu-settings');
+const btnMenuLeave     = document.getElementById('btn-menu-leave');
+
+function updateSlamUI() {
+    if (!toggleSlamBtn) return;
+    if (isSlamEnabled) {
+        toggleSlamBtn.textContent = 'Ativado';
+        toggleSlamBtn.className = 'font-bold px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-500 transition-colors';
+    } else {
+        toggleSlamBtn.textContent = 'Desativado';
+        toggleSlamBtn.className = 'font-bold px-3 py-1 rounded-lg bg-zinc-700 text-zinc-300 hover:bg-zinc-600 transition-colors';
+    }
+}
+updateSlamUI();
+
+if (btnGameMenu)      btnGameMenu.addEventListener('click', () => gameMenuModal.classList.remove('hidden'));
+if (btnCloseGameMenu) btnCloseGameMenu.addEventListener('click', () => gameMenuModal.classList.add('hidden'));
+if (btnMenuResume)    btnMenuResume.addEventListener('click', () => gameMenuModal.classList.add('hidden'));
+
+if (toggleSlamBtn) {
+    toggleSlamBtn.addEventListener('click', () => {
+        isSlamEnabled = !isSlamEnabled;
+        localStorage.setItem('truco_slam_enabled', isSlamEnabled);
+        updateSlamUI();
+        showNotification(isSlamEnabled ? "Pancadas Ativadas!" : "Pancadas Desativadas", "border-amber-500 text-amber-400");
+    });
+}
+
+if (btnMenuRules) {
+    btnMenuRules.addEventListener('click', () => {
+        gameMenuModal.classList.add('hidden');
+        rulesModal.classList.remove('hidden');
+    });
+}
+if (btnCloseRules) btnCloseRules.addEventListener('click', () => rulesModal.classList.add('hidden'));
+
+if (btnMenuSettings) {
+    btnMenuSettings.addEventListener('click', () => {
+        gameMenuModal.classList.add('hidden');
+        settingsModal.classList.remove('hidden');
+    });
+}
+
+if (btnMenuLeave) {
+    btnMenuLeave.addEventListener('click', () => {
+        if (confirm('Tem certeza de que deseja sair da partida e retornar ao lobby?')) {
+            localStorage.removeItem('truco_current_room');
+            socket.emit('leaveRoom', { roomCode: currentRoomCode });
+            location.reload();
+        }
+    });
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (rulesModal && !rulesModal.classList.contains('hidden')) {
+            rulesModal.classList.add('hidden');
+        } else if (settingsModal && !settingsModal.classList.contains('hidden')) {
+            settingsModal.classList.add('hidden');
+        } else if (isChatOpen()) {
+            closeChat();
+        } else if (gameMenuModal) {
+            gameMenuModal.classList.toggle('hidden');
+        }
+    }
+});
+
+socket.on('playerLeft', (data) => {
+    showNotification(`${data.playerName} saiu da partida.`, 'border-red-500 text-red-400');
 });

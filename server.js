@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { startGame, evaluateTrick, checkHandWinner, startHand } = require('./game');
+const { startGame, evaluateTrick, checkHandWinner, startHand, getCardPower } = require('./game');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,6 +10,50 @@ const io = new Server(server);
 app.use(express.static('public'));
 const rooms = {};
 const disconnectionTimeouts = {};
+
+// ─── Cálculo de MVP da Partida ────────────────────────────────────────────────
+function calculateMVP(state, winnerTeam) {
+    if (!state || !state.matchStats || !state.matchStats.playerStats) return null;
+    const candidates = state.players.filter((_, idx) => (idx % 2) === winnerTeam);
+    if (!candidates || candidates.length === 0) return null;
+
+    let bestPlayer = null;
+    let maxPoints = -1;
+
+    candidates.forEach(p => {
+        const stats = state.matchStats.playerStats[p.id];
+        if (!stats) return;
+        const mvpScore = (stats.tricksWon * 20) + (stats.decisiveTricksWon * 35) + (stats.trucosWon * 25) + (stats.manilhasPlayed * 10);
+        if (mvpScore > maxPoints) {
+            maxPoints = mvpScore;
+            bestPlayer = {
+                id: p.id,
+                name: p.name,
+                avatar: p.avatar || '🤠',
+                title: p.title || 'Campeão',
+                mvpScore,
+                tricksWon: stats.tricksWon,
+                decisiveTricksWon: stats.decisiveTricksWon,
+                trucosCalled: stats.trucosCalled,
+                trucosWon: stats.trucosWon,
+                manilhasPlayed: stats.manilhasPlayed
+            };
+        }
+    });
+
+    return bestPlayer || {
+        id: candidates[0].id,
+        name: candidates[0].name,
+        avatar: candidates[0].avatar || '🤠',
+        title: candidates[0].title || 'Campeão',
+        mvpScore: 50,
+        tricksWon: 1,
+        decisiveTricksWon: 1,
+        trucosCalled: 0,
+        trucosWon: 0,
+        manilhasPlayed: 0
+    };
+}
 
 // ─── Emite o estado do jogo para cada jogador individualmente ─────────────────
 function emitGameState(roomCode, state) {
@@ -55,13 +99,20 @@ function emitGameState(roomCode, state) {
 io.on('connection', (socket) => {
 
     // ── Criar sala ────────────────────────────────────────────────────────────
-    socket.on('createRoom', ({ playerName, token, gameMode, variant }) => {
+    socket.on('createRoom', ({ playerName, token, gameMode, variant, avatar, title }) => {
         const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
         const mode = gameMode || '2v2';
         const varnt = variant || 'paulista';
 
         rooms[roomCode] = {
-            players: [{ id: socket.id, name: playerName, token, disconnected: false }],
+            players: [{
+                id: socket.id,
+                name: playerName,
+                token,
+                avatar: avatar || '🤠',
+                title: title || 'Truqueiro Raiz',
+                disconnected: false
+            }],
             gameMode: mode,
             variant: varnt
         };
@@ -71,7 +122,7 @@ io.on('connection', (socket) => {
     });
 
     // ── Entrar na sala ────────────────────────────────────────────────────────
-    socket.on('joinRoom', ({ roomCode, playerName, token }) => {
+    socket.on('joinRoom', ({ roomCode, playerName, token, avatar, title }) => {
         const room = rooms[roomCode];
         if (!room) { socket.emit('errorMsg', 'Sala não encontrada.'); return; }
 
@@ -83,6 +134,9 @@ io.on('connection', (socket) => {
             const oldSocketId = existingPlayer.id;
             existingPlayer.id = socket.id;
             existingPlayer.disconnected = false;
+            if (avatar) existingPlayer.avatar = avatar;
+            if (title) existingPlayer.title = title;
+
             socket.join(roomCode);
             if (disconnectionTimeouts[token]) {
                 clearTimeout(disconnectionTimeouts[token]);
@@ -110,7 +164,14 @@ io.on('connection', (socket) => {
 
         // Novo jogador
         if (room.players.length < maxPlayers) {
-            room.players.push({ id: socket.id, name: playerName, token, disconnected: false });
+            room.players.push({
+                id: socket.id,
+                name: playerName,
+                token,
+                avatar: avatar || '🤠',
+                title: title || 'Truqueiro Raiz',
+                disconnected: false
+            });
             socket.join(roomCode);
             io.to(roomCode).emit('playerJoined', { roomCode, players: room.players, gameMode: room.gameMode, variant: room.variant });
 
@@ -129,8 +190,67 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ── Sair da sala ──────────────────────────────────────────────────────────
+    socket.on('leaveRoom', ({ roomCode }) => {
+        const room = rooms[roomCode];
+        if (!room) return;
+        socket.leave(roomCode);
+        const playerIndex = room.players.findIndex(p => p.id === socket.id);
+        if (playerIndex !== -1) {
+            const player = room.players[playerIndex];
+            room.players.splice(playerIndex, 1);
+            io.to(roomCode).emit('playerLeft', { playerId: socket.id, playerName: player.name });
+            if (room.players.length === 0) {
+                delete rooms[roomCode];
+            } else if (room.gameState) {
+                io.to(roomCode).emit('errorMsg', `${player.name} saiu da partida.`);
+            }
+        }
+    });
+
+    // ── Status das Salas Recentes e Pontuação ──────────────────────────────────
+    socket.on('getRecentRoomsStatus', ({ token, localRoomCodes = [] }) => {
+        const list = [];
+        const codesToInspect = new Set(localRoomCodes || []);
+
+        // Adiciona todas as salas onde o token deste jogador está registrado
+        for (const code in rooms) {
+            if (rooms[code].players.some(p => p.token === token)) {
+                codesToInspect.add(code);
+            }
+        }
+
+        codesToInspect.forEach(code => {
+            const room = rooms[code];
+            if (room) {
+                const is1v1 = (room.gameMode === '1v1');
+                const teamAName = is1v1 ? (room.players[0]?.name || 'Jogador A') : 'Dupla A';
+                const teamBName = is1v1 ? (room.players[1]?.name || 'Jogador B') : 'Dupla B';
+                const score = room.gameState ? (room.gameState.score || [0, 0]) : [0, 0];
+                const isFinished = room.gameState && (score[0] >= 12 || score[1] >= 12);
+                const isPlaying = !!room.gameState && !isFinished;
+                const myPlayer = room.players.find(p => p.token === token);
+
+                list.push({
+                    roomCode: code,
+                    gameMode: room.gameMode || '2v2',
+                    variant: room.variant || 'paulista',
+                    score,
+                    scoreText: `${teamAName} ${score[0]} × ${score[1]} ${teamBName}`,
+                    status: isFinished ? 'finished' : (isPlaying ? 'playing' : 'waiting'),
+                    playersCount: room.players.length,
+                    maxPlayers: is1v1 ? 2 : 4,
+                    hasActiveMatch: isPlaying && !!myPlayer,
+                    myTeam: myPlayer ? (room.players.indexOf(myPlayer) % 2) : -1
+                });
+            }
+        });
+
+        socket.emit('recentRoomsStatus', list);
+    });
+
     // ── Jogar carta ───────────────────────────────────────────────────────────
-    socket.on('playCard', ({ roomCode, card, hidden }) => {
+    socket.on('playCard', ({ roomCode, card, hidden, slam }) => {
         const room = rooms[roomCode];
         if (!room || !room.gameState) return;
         const state = room.gameState;
@@ -157,25 +277,38 @@ io.on('connection', (socket) => {
         }
         hand.splice(cardIndex, 1);
 
+        const cardPower = getCardPower(card, state.manilhaValue, state.variant);
+        const isManilha = (cardPower >= 100);
+        const isSlam = (!!slam || isManilha);
+        if (isManilha && state.matchStats && state.matchStats.playerStats[socket.id]) {
+            state.matchStats.playerStats[socket.id].manilhasPlayed++;
+        }
+
         state.tableCards.push({ playerId: socket.id, card });
 
         // Vaza incompleta — próximo jogador
         if (state.tableCards.length < numPlayers) {
             state.turnIndex = (state.turnIndex + 1) % numPlayers;
             state.turn = state.players[state.turnIndex].id;
-            io.to(roomCode).emit('cardPlayed', { playerId: socket.id, card, nextTurnId: state.turn });
+            io.to(roomCode).emit('cardPlayed', { playerId: socket.id, card, isManilha, isSlam, nextTurnId: state.turn });
         }
         // Vaza completa — avaliar resultado
         else {
             state.isProcessing = true;
             state.turn = null;
-            io.to(roomCode).emit('cardPlayed', { playerId: socket.id, card, nextTurnId: null });
+            io.to(roomCode).emit('cardPlayed', { playerId: socket.id, card, isManilha, isSlam, nextTurnId: null });
 
             const result = evaluateTrick(state.tableCards, state.manilhaValue, state.players, state.variant);
             state.trickResults.push(result.winnerTeam);
 
             if (result.winnerTeam !== -1 && result.topPlayerId) {
                 state.turnIndex = state.players.findIndex(p => p.id === result.topPlayerId);
+                if (state.matchStats && state.matchStats.playerStats[result.topPlayerId]) {
+                    state.matchStats.playerStats[result.topPlayerId].tricksWon++;
+                    if (state.trickResults.length === 3) {
+                        state.matchStats.playerStats[result.topPlayerId].decisiveTricksWon++;
+                    }
+                }
             }
 
             const handWinner = checkHandWinner(state.trickResults);
@@ -190,6 +323,17 @@ io.on('connection', (socket) => {
                     state.tableCards = [];
 
                     if (handWinner !== null) {
+                        if (state.matchStats) {
+                            state.matchStats.handsPlayed++;
+                            if (handWinner !== -1 && state.trucoLevel > 0) {
+                                state.players.forEach((p, idx) => {
+                                    if ((idx % 2) === handWinner && state.matchStats.playerStats[p.id]) {
+                                        state.matchStats.playerStats[p.id].trucosWon++;
+                                    }
+                                });
+                            }
+                        }
+
                         if (handWinner === -1) {
                             io.to(roomCode).emit('handEnded', { score: state.score, winnerTeam: -1, message: 'Mão empatada! Ninguém pontua.' });
                             setTimeout(() => { startHand(state); emitGameState(roomCode, state); }, 3000);
@@ -197,7 +341,12 @@ io.on('connection', (socket) => {
                             state.score[handWinner] += state.handValue;
                             io.to(roomCode).emit('handEnded', { score: state.score, winnerTeam: handWinner });
                             if (state.score[handWinner] >= 12) {
-                                io.to(roomCode).emit('gameOver', { winnerTeam: handWinner, score: state.score });
+                                io.to(roomCode).emit('gameOver', {
+                                    winnerTeam: handWinner,
+                                    score: state.score,
+                                    stats: state.matchStats,
+                                    mvp: calculateMVP(state, handWinner)
+                                });
                             } else {
                                 setTimeout(() => { startHand(state); emitGameState(roomCode, state); }, 3000);
                             }
@@ -261,12 +410,23 @@ io.on('connection', (socket) => {
             return;
         }
 
+        const values = [1, 3, 6, 9, 12];
+        const nextVal = values[state.trucoLevel + 1] || 12;
+
+        if (state.matchStats) {
+            state.matchStats.trucosCalledCount++;
+            if (state.matchStats.playerStats[socket.id]) {
+                state.matchStats.playerStats[socket.id].trucosCalled++;
+            }
+            if (nextVal > state.matchStats.maxTrucoValue) {
+                state.matchStats.maxTrucoValue = nextVal;
+            }
+        }
+
         state.lastTrucoTeam = myTeam;
         state.isProcessing = true;
         state.trucoAnsweringTeam = (myTeam === 0 ? 1 : 0);
         state.trucoRunVoters = [];
-
-        const values = [1, 3, 6, 9, 12];
         state.trucoLevel++;
 
         io.to(roomCode).emit('trucoRequested', {
@@ -309,9 +469,21 @@ io.on('connection', (socket) => {
                 io.to(roomCode).emit('trucoCanceled');
                 io.to(roomCode).emit('trickEnded', { trickResults: state.trickResults, winnerTeam });
                 state.tableCards = [];
-                io.to(roomCode).emit('handEnded', { score: state.score, winnerTeam, message: 'A equipe correu do Truco!' });
+                if (state.matchStats) {
+                    state.matchStats.handsPlayed++;
+                    state.players.forEach((p, idx) => {
+                        if ((idx % 2) === winnerTeam && state.matchStats.playerStats[p.id]) {
+                            state.matchStats.playerStats[p.id].trucosWon++;
+                        }
+                    });
+                }
                 if (state.score[winnerTeam] >= 12) {
-                    io.to(roomCode).emit('gameOver', { winnerTeam, score: state.score });
+                    io.to(roomCode).emit('gameOver', {
+                        winnerTeam,
+                        score: state.score,
+                        stats: state.matchStats,
+                        mvp: calculateMVP(state, winnerTeam)
+                    });
                 } else {
                     setTimeout(() => { startHand(state); emitGameState(roomCode, state); }, 3000);
                 }
@@ -362,9 +534,15 @@ io.on('connection', (socket) => {
             state.score[winnerTeam] += 1;
             io.to(roomCode).emit('trickEnded', { trickResults: state.trickResults, winnerTeam });
             state.tableCards = [];
+            if (state.matchStats) state.matchStats.handsPlayed++;
             if (state.score[winnerTeam] >= 12) {
                 io.to(roomCode).emit('handEnded', { score: state.score, winnerTeam, message: 'A equipe correu da Mão de 11!' });
-                io.to(roomCode).emit('gameOver', { winnerTeam, score: state.score });
+                io.to(roomCode).emit('gameOver', {
+                    winnerTeam,
+                    score: state.score,
+                    stats: state.matchStats,
+                    mvp: calculateMVP(state, winnerTeam)
+                });
                 return;
             }
             io.to(roomCode).emit('handEnded', { score: state.score, winnerTeam, message: 'A equipe correu da Mão de 11!' });
@@ -412,6 +590,8 @@ io.on('connection', (socket) => {
         io.to(roomCode).emit('chatMessageReceived', {
             playerId: socket.id,
             playerName,
+            playerAvatar: player ? (player.avatar || '🤠') : '🤠',
+            playerTitle: player ? (player.title || 'Truqueiro') : 'Truqueiro',
             playerTeam,
             message: cleanMsg,
             time: timeStr

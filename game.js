@@ -20,8 +20,9 @@ function shuffle(deck) {
 }
 
 // ─── Truco Paulista ───────────────────────────────────────────────────────────
-// Manilha definida pela carta seguinte ao vira (wrap-around: 3 -> 4, 2 -> 3).
+// Manilha definida pela carta seguinte ao vira. Quando cair 2, a manilha é 4.
 function getManilhaValue(viraValue) {
+    if (viraValue === '2') return '4';
     const index = VALUES.indexOf(viraValue);
     return VALUES[(index + 1) % VALUES.length];
 }
@@ -173,11 +174,34 @@ module.exports = {
             variant,
             gameMode
         };
+
+        const playerStats = {};
+        players.forEach(p => {
+            playerStats[p.id] = {
+                id: p.id,
+                name: p.name,
+                avatar: p.avatar || '🤠',
+                title: p.title || 'Truqueiro',
+                tricksWon: 0,
+                decisiveTricksWon: 0,
+                trucosCalled: 0,
+                trucosWon: 0,
+                manilhasPlayed: 0
+            };
+        });
+        state.matchStats = {
+            handsPlayed: 0,
+            trucosCalledCount: 0,
+            maxTrucoValue: 1,
+            playerStats
+        };
+
         startHand(state);
         return state;
     },
     getCardPower,
     evaluateTrick,
     checkHandWinner,
-    startHand
+    startHand,
+    getManilhaValue
 };
